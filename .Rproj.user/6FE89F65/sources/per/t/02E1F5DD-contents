@@ -1,0 +1,719 @@
+#
+# This is a Shiny web application. You can run the application by clicking
+# the 'Run App' button above.
+#
+# Find out more about building applications with Shiny here:
+#
+#    http://shiny.rstudio.com/
+#
+
+library(shiny)
+library(shinydashboard)
+library(shinyWidgets)
+library(gt)
+library(gtExtras)
+library(htmltools)
+library(tidyverse)
+library(reactable)
+library(bslib)
+library(lubridate)
+
+cmjData <- read.csv("forcedecksData.csv")
+dynamoData <- read.csv("dynamoData.csv")
+trackmanData <- read.csv("appData.csv")
+
+# Define UI for application that draws a histogram
+ui <- dashboardPage(
+  dashboardHeader(disable = TRUE),
+  dashboardSidebar(
+    radioButtons(
+      inputId = "positionType",
+      label = "Position:",
+      choices = c("Pitcher", "Hitter")
+    ),
+    selectInput(
+      inputId = "playerName",
+      label = "Player:",
+      choices = sort(unique(cmjData$Name)),
+      selected = sort(unique(cmjData$Name))[1]
+    ),
+    sidebarMenu(
+      id = "tabs",
+      menuItem("Overview", tabName = "overviewTab", icon = NULL,
+        menuSubItem("Summary", tabName = "summaryTab"),
+        menuSubItem("Workload Dashboard", tabName = "workloadDashboard")  
+      )
+    )
+  ),
+  dashboardBody(
+    tags$style(HTML("
+      .content-wrapper {
+        background-color: white;
+      }
+      
+      .content-wrapper, .right-side {
+        min-height: 100vh !important;
+      }
+      
+      .box {
+        padding: 0px;
+        margin: 0px;
+        border: none !important;
+        box-shadow: none !important;
+      }
+                    
+                    
+    ")),
+    tabItems(
+      tabItem(
+        tabName = "overviewTab",
+        h2("Overview")
+      ),
+      tabItem(
+        tabName = "summaryTab",
+        h2("Summary"),
+        div(
+          style = "width: fit-content;",
+          reactableOutput("flagsTable")
+        )
+      ),
+      tabItem(
+        tabName = "workloadDashboard",
+        h2("Workload Dashboard"),
+        
+        fluidRow(
+          box(
+            tags$h4("Overview:", style = "font-weight: bold; font-size: 18px; margin-top: 0px;"),
+            width = 6,
+            tags$h4("CMJ Summary:", style = "font-weight: bold; font-size: 16px; margin-top: 5px; margin-left: 10px;"),
+            div(
+              style = "width: fit-content; margin-left: 10px; margin-top: 10px;",
+              reactableOutput("cmjSummaryTable")
+            ),
+            
+            uiOutput("dynamoSummaryTitle"),
+            div(
+              style = "width: fit-content; margin-left: 10px; margin-top: 10px;",
+              reactableOutput("dynamoSummaryTable")
+            ),
+            
+            uiOutput("trackmanSummaryTitle"),
+            div(
+              style = "width: fit-content; margin-left: 10px; margin-top: 10px;",
+              reactableOutput("trackmanSummaryTable")
+            ),
+            
+            tags$style(HTML("
+              .box-header {
+                font-size: 24px;
+                font-weight: bold;
+              }
+              .gt_table {
+                margin-left: 10px !important;
+                margin-right: 0 !important;
+                margin-bottom: 0 !important;
+              }
+              .box-body {
+                padding-left: 0 !important;
+              }
+              .box-body h4 {
+                margin-top: 0px;
+                margin-bottom: 0px;
+              }
+            "))
+          )
+        ),
+        fluidRow(
+          box(
+            class = "centered-box",
+            width = 12,
+            div(
+              tags$h4("Logs:", style = "font-weight: bold; font-size: 18px; margin-top: 0px; margin-bottom: 10px;"),
+              style = "text-align: center;",
+              radioButtons(
+                inputId = "logType",
+                label = NULL,
+                choices = c("CMJ", "Dynamo"),
+                inline = TRUE
+              ),
+              div(
+                style = "width: fit-content; margin: auto;",
+                reactableOutput("logsTable")
+              )
+            ),
+            
+            tags$style(HTML("
+              .centered-box .gt_table {
+                margin-left: auto !important;
+                margin-right: auto !important;
+                margin-top: -10px;
+              }
+              .centered-box .box-body h4 {
+                  margin-top: 0px;
+                  margin-bottom: 10px;
+                }
+            "))
+          )
+        )
+      )
+    )
+  )
+)
+
+summaryServer <- function(input, output, currPlayer, cmjData, dynamoData, trackmanData) {
+  # CMJ Data
+  recCmj <- cmjData %>% 
+    filter(Date == max(Date, na.rm = TRUE)) %>%
+    select(-Additional_Load_lb)  # Remove from recent
+  
+  pastCmj <- cmjData %>% 
+    filter(Date != max(Date, na.rm = TRUE)) %>% 
+    group_by(Name) %>% 
+    summarise(
+      Jump_Height_Imp_Mom = mean(Jump_Height_Imp_Mom, na.rm = TRUE),
+      Peak_Landing_Force = mean(Peak_Landing_Force, na.rm = TRUE),
+      Peak_Power = mean(Peak_Power, na.rm = TRUE),
+      RSI_mod = mean(RSI_mod, na.rm = TRUE),
+      .groups = "drop"
+    )
+  
+  cmj_comparison <- recCmj %>%
+    left_join(pastCmj, by = "Name", suffix = c("_recent", "_past")) %>%
+    pivot_longer(
+      cols = -Name,
+      names_to = c("Test", ".value"),
+      names_pattern = "(.*)_(recent|past)"
+    ) %>%
+    mutate(
+      `Percent Change` = 100 * (`recent` - `past`) / `past`
+    ) %>%
+    mutate(
+      recent = round(recent, 3),
+      past = round(past, 3),
+      `Percent Change` = round(`Percent Change`, 3)
+    ) %>% 
+    select(
+      Test,
+      `Recent Measurement` = recent,
+      `Past Average` = past,
+      `Percent Change`
+    ) %>%
+    filter(!is.na(Test))
+  
+  # Dynamo Data
+  dynamoData <- dynamoData %>%
+    mutate(
+      Timestamp = as.POSIXct(paste(Date.UTC, Time.UTC), format = "%m/%d/%Y %I:%M %p", tz = "UTC")
+    )
+  
+  recDynamo <- dynamoData %>% 
+    group_by(Name, Movement) %>% 
+    slice_max(Timestamp, n = 1, with_ties = FALSE) %>% 
+    ungroup() %>% 
+    pivot_longer(
+      cols = where(is.numeric) & !c("External.Id", "L_Reps", "R_Reps", "N_Reps"),
+      names_to = "Metric",
+      values_to = "Recent"
+    )
+  
+  pastDynamo <- dynamoData %>% 
+    group_by(Name, Movement) %>% 
+    filter(Timestamp < max(Timestamp, na.rm = TRUE)) %>% 
+    summarise(across(where(is.numeric) & !c("External.Id", "L_Reps", "R_Reps", "N_Reps"), ~mean(.x, na.rm = TRUE)), .groups = "drop") %>%
+    pivot_longer(
+      cols = -c(Name, Movement),
+      names_to = "Metric",
+      values_to = "Average"
+    )
+  
+  dynamo_comparison <- recDynamo %>%
+    left_join(pastDynamo, by = c("Name", "Movement", "Metric")) %>%
+    mutate(
+      `Percent Change` = 100 * (Recent - Average) / Average,
+      Test = paste(Movement, Metric, sep = " - ")
+    ) %>%
+    mutate(
+      Recent = round(Recent, 3),
+      Average = round(Average, 3),
+      `Percent Change` = round(`Percent Change`, 3)
+    ) %>% 
+    select(
+      Test,
+      `Recent Measurement` = Recent,
+      `Past Average` = Average,
+      `Percent Change`
+    ) %>%
+    filter(!is.na(`Recent Measurement`))
+    
+  combined_comparison <- bind_rows(cmj_comparison, dynamo_comparison)
+  
+  output$flagsTable <- renderReactable({
+    reactable(
+      combined_comparison,
+      searchable = FALSE,
+      resizable = TRUE,
+      pagination = FALSE,
+      showPageInfo = FALSE,
+      onClick = "expand",
+      outlined = TRUE,
+      bordered = TRUE,
+      striped = TRUE,
+      highlight = TRUE,
+      compact = TRUE,
+      fullWidth = TRUE,
+      wrap = FALSE,
+      height = 700,
+      defaultSortOrder = "asc",
+      defaultSorted = "Percent Change",
+      defaultColDef = colDef(vAlign = "center"),
+      columns = list(
+        `Percent Change` = colDef(
+          style = function(value) {
+            capped_value <- max(min(value, 50), -50)
+            
+            norm_val <- (capped_value + 50) / 100
+            
+            color <- colorRampPalette(c("red", "white", "green"))(100)[round(norm_val * 99) + 1]
+            
+            list(background = color)
+          },
+          format = colFormat(suffix = "%", digits = 1),
+          align = "center",
+          width = 150
+        ),
+        Test = colDef(width = 300),
+        `Recent Measurement` = colDef(width = 150),
+        `Past Average` = colDef(width = 150)
+      )
+    )
+  })
+}
+
+dashboardServer <- function(input, output, currPlayer, cmjData, dynamoData, trackmanData) {
+  currLogType <- input$logType
+  
+  # CMJ Summary Data
+  maxJumpHeight <- c(max(cmjData$Jump_Height_Imp_Mom))
+  maxPeakLandForce <- c(max(cmjData$Peak_Landing_Force))
+  maxPeakPowerBM <- c(max(cmjData$Peak_Power))
+  maxRSI <- c(max(cmjData$RSI_mod))
+  
+  cmjSummaryData <- data.frame(
+    `Jump Height` = maxJumpHeight,
+    `Peak Land Force` = maxPeakLandForce,
+    `Peak Power / BM` = maxPeakPowerBM,
+    `RSI` = maxRSI
+  )
+  
+  colnames(cmjSummaryData) <- c("Jump Height", "Peak Land Force", "Peak Power / BM", "RSI")
+  
+  output$cmjSummaryTable <- renderReactable({
+    reactable(
+      cmjSummaryData,
+      searchable = FALSE,
+      resizable = TRUE,
+      pagination = FALSE,
+      showPageInfo = FALSE,
+      outlined = TRUE,
+      bordered = TRUE,
+      striped = TRUE,
+      highlight = TRUE,
+      compact = TRUE,
+      fullWidth = TRUE,
+      wrap = FALSE,
+      defaultColDef = colDef(vAlign = "center"),
+      columns = list(
+        `Jump Height` = colDef(width = 100, format = colFormat(digits = 2)),
+        `Peak Land Force` = colDef(width = 125, format = colFormat(digits = 2)),
+        `Peak Power / BM` = colDef(width = 125, format = colFormat(digits = 2)),
+        `RSI` = colDef(width = 100, format = colFormat(digits = 2))
+      )
+    )
+  })
+  
+  # Dynamo Data Summary
+  if(nrow(dynamoData > 0)) {
+    groupedDynamo <- dynamoData %>% 
+      group_by(Movement, Position) %>% 
+      summarise(
+        R_Max_Force = max(R_Max_Force, na.rm = TRUE),
+        L_Max_Force = max(L_Max_Force, na.rm = TRUE),
+        R_Avg_Force = max(R_Avg_Force, na.rm = TRUE),
+        L_Avg_Force = max(L_Avg_Force, na.rm = TRUE),
+        R_RFD = max(R_RFD, na.rm = TRUE),
+        L_RFD = max(L_RFD, na.rm = TRUE),
+        R_Time_Peak_Force = max(R_Time_Peak_Force, na.rm = TRUE),
+        L_Time_Peak_Force = max(L_Time_Peak_Force, na.rm = TRUE),
+        R_Impulse = max(R_Impulse, na.rm = TRUE),
+        L_Impulse = max(L_Impulse, na.rm = TRUE)
+      ) %>% 
+      mutate(
+        Position = case_when(
+          Position == "Supine - Elbow 90 Degrees, 90 Degree Shoulder Abduction" ~ "Supine El/Sld 90/90",
+          TRUE ~ Position
+        ),
+        max_force = pmax(R_Max_Force, L_Max_Force, na.rm = TRUE),
+        avg_force = pmax(R_Avg_Force, L_Avg_Force, na.rm = TRUE),
+        max_rfd = pmax(R_RFD, L_RFD, na.rm = TRUE),
+        max_tm_pk_frc = pmax(R_Time_Peak_Force, L_Time_Peak_Force, na.rm = TRUE),
+        max_impulse = pmax(R_Impulse, L_Impulse, na.rm = TRUE)
+      ) %>% 
+      arrange(Movement) %>% 
+      select(Movement, Position, max_force, avg_force, max_rfd, max_tm_pk_frc, max_impulse)
+    
+    movement <- groupedDynamo$Movement
+    position <- groupedDynamo$Position
+    maxForce <- groupedDynamo$max_force
+    avgForce <- groupedDynamo$avg_force
+    rfd <- groupedDynamo$max_rfd
+    timeToPeakFrc <- groupedDynamo$max_tm_pk_frc
+    impulse <- groupedDynamo$max_impulse
+    
+    dynamoSummaryData <- data.frame(
+      `Movement` = movement,
+      `Position` = position,
+      `Max Force` = maxForce,
+      `Avg Force` = avgForce,
+      `RFD` = rfd,
+      `Time PkForce` = timeToPeakFrc,
+      `Impulse` = impulse
+    )
+    
+    colnames(dynamoSummaryData) <- c("Movement", "Position",
+                                     "Max Force", "Avg. Force",
+                                     "RFD", "Time Pk. Force",
+                                     "Impulse")
+    
+    output$dynamoSummaryTable <- renderReactable({
+      reactable(
+        dynamoSummaryData,
+        searchable = FALSE,
+        resizable = TRUE,
+        pagination = FALSE,
+        showPageInfo = FALSE,
+        outlined = TRUE,
+        bordered = TRUE,
+        striped = TRUE,
+        highlight = TRUE,
+        compact = TRUE,
+        fullWidth = TRUE,
+        wrap = FALSE,
+        defaultColDef = colDef(vAlign = "center"),
+        columns = list(
+          `Movement` = colDef(width = 150, format = colFormat(digits = 2)),
+          `Position` = colDef(width = 150, format = colFormat(digits = 2)),
+          `Max Force` = colDef(width = 125, format = colFormat(digits = 2)),
+          `Avg. Force` = colDef(width = 125, format = colFormat(digits = 2)),
+          `RFD` = colDef(width = 125, format = colFormat(digits = 2)),
+          `Time Pk. Force` = colDef(width = 125, format = colFormat(digits = 2)),
+          `Impulse` = colDef(width = 125, format = colFormat(digits = 2))
+        )
+      )
+    })
+    
+    output$dynamoSummaryTitle <- renderUI({
+      tags$h4("Dynamo Summary:", style = "font-weight: bold; font-size: 16px; margin-top: 5px; margin-left: 10px;")
+    })
+  } else {
+    output$dynamoSummaryTable <- NULL
+    output$dynamoSummaryTitle <- renderUI({
+      NULL
+    })
+  }
+  
+  # Trackman Data Summary
+  if(nrow(trackmanData) > 0) {
+    trackmanFastballVelo <- trackmanData %>% 
+      filter(TaggedPitchType == "Fastball") %>% 
+      group_by(Pitcher) %>% 
+      summarise(mean_velo = round(mean(RelSpeed, na.rm = TRUE), 2)) %>% 
+      select(mean_velo)
+    
+    trackmanPitchPerGame <- trackmanData %>% 
+      group_by(Date) %>% 
+      summarise(num_pitches = n(), Pitcher = last(Pitcher)) %>% 
+      group_by(Pitcher) %>% 
+      summarise(pitches_per_game = round(sum(num_pitches) / n(), 2)) %>% 
+      select(pitches_per_game)
+    
+    trackmanSummaryData <- data.frame(
+      `Avg Fb Velo` = trackmanFastballVelo,
+      `Pitches / Gm` = trackmanPitchPerGame
+    )
+    
+    colnames(trackmanSummaryData) <- c("Avg. Fastball Velo", "Pitches Per Game")
+    
+    output$trackmanSummaryTable <- renderReactable({
+      reactable(
+        trackmanSummaryData,
+        searchable = FALSE,
+        resizable = TRUE,
+        pagination = FALSE,
+        showPageInfo = FALSE,
+        outlined = TRUE,
+        bordered = TRUE,
+        striped = TRUE,
+        highlight = TRUE,
+        compact = TRUE,
+        fullWidth = TRUE,
+        wrap = FALSE,
+        defaultColDef = colDef(vAlign = "center"),
+        columns = list(
+          `Avg. Fastball Velo` = colDef(width = 150, format = colFormat(digits = 2)),
+          `Pitches Per Game` = colDef(width = 150, format = colFormat(digits = 2))
+        )
+      )
+    })
+    
+    output$trackmanSummaryTitle <- renderUI({
+      tags$h4("Trackman Summary:", style = "font-weight: bold; font-size: 16px; margin-top: 5px; margin-left: 10px;")
+    })
+  } else {
+    output$trackmanSummaryTable <- NULL
+    output$trackmanSummaryTitle <- renderUI({
+      NULL
+    })
+  }
+  
+  # Log Table
+  if(currLogType == "CMJ") {
+    cmjLogTable <- cmjData %>% 
+      mutate(
+        testType = Test.Type,
+        date = Date,
+        time = Time,
+        bw_lb = BW_LB,
+        reps = Reps,
+        jumpHeight = Jump_Height_Imp_Mom,
+        peakLandForce = Peak_Landing_Force,
+        peakPowerBw = Peak_Power,
+        rsi = RSI_mod
+      )
+    
+    logTableData <- data.frame(
+      `Date` = cmjLogTable$date,
+      `Time` = cmjLogTable$time,
+      `BW LB` = cmjLogTable$bw_lb,
+      `Jump Height` = cmjLogTable$jumpHeight,
+      `Peak Land Force` = cmjLogTable$peakLandForce,
+      `Peak Power / BM` = cmjLogTable$peakPowerBw,
+      `RSI` = cmjLogTable$rsi
+    )
+    
+    colnames(logTableData) <- c("Date",
+                                "Time", "BW (lbs)", "Jump Height",
+                                "Pk. Land Force",
+                                "Pk. Power/BM",
+                                "RSI")
+    
+    output$logsTable <- renderReactable({
+      reactable(
+        logTableData,
+        searchable = FALSE,
+        resizable = TRUE,
+        pagination = FALSE,
+        showPageInfo = FALSE,
+        outlined = TRUE,
+        bordered = TRUE,
+        striped = TRUE,
+        highlight = TRUE,
+        compact = TRUE,
+        fullWidth = TRUE,
+        wrap = FALSE,
+        defaultColDef = colDef(vAlign = "center"),
+        columns = list(
+          `Date` = colDef(width = 100, format = colFormat(digits = 2)),
+          `Time` = colDef(width = 100, format = colFormat(digits = 2)),
+          `BW (lbs)` = colDef(width = 100, format = colFormat(digits = 2)),
+          `Jump Height` = colDef(width = 125, format = colFormat(digits = 2)),
+          `Pk. Land Force` = colDef(width = 125, format = colFormat(digits = 2)),
+          `Pk. Power/BM` = colDef(width = 125, format = colFormat(digits = 2)),
+          `RSI` = colDef(width = 125, format = colFormat(digits = 2))
+        )
+      )
+    })
+  } else {
+    if(nrow(dynamoData > 0)){
+      dynamoLogData <- dynamoData %>% 
+        mutate(
+          date = Date.UTC,
+          time = Time.UTC,
+          movement = Movement,
+          type = Type,
+          bodyRegion = Body_Region,
+          position = case_when(
+            Position == "Supine - Elbow 90 Degrees, 90 Degree Shoulder Abduction" ~ "Supine El/Sld 90/90",
+            TRUE ~ Position
+          ),
+          reps = pmax(L_Reps, R_Reps, na.rm = TRUE),
+          maxForce = pmax(L_Max_Force, R_Max_Force, na.rm = TRUE),
+          avgForce = pmax(L_Avg_Force, R_Avg_Force, na.rm = TRUE),
+          rfd = pmax(L_RFD, R_RFD, na.rm = TRUE),
+          tmPkForce = pmax(L_Time_Peak_Force, R_Time_Peak_Force, na.rm = TRUE),
+          impulse = pmax(L_Impulse, R_Impulse, na.rm = TRUE)
+        )
+      
+      logTableData <- data.frame(
+        `Date` = dynamoLogData$date,
+        `Time` = dynamoLogData$time,
+        `Movement` = dynamoLogData$movement,
+        `Position` = dynamoLogData$position,
+        `Max Force` = dynamoLogData$maxForce,
+        `Avg Force` = dynamoLogData$avgForce,
+        `RFD` = dynamoLogData$rfd,
+        `Time PkForce` = dynamoLogData$tmPkForce,
+        `Impulse` = dynamoLogData$impulse
+      )
+      
+      colnames(logTableData) <- c("Date", "Time",
+                                  "Movement", "Position", "Max Force",
+                                  "Avg. Force", "RFD",
+                                  "Time Pk. Force", "Impulse")
+      
+      output$logsTable <- renderReactable({
+        reactable(
+          logTableData,
+          searchable = FALSE,
+          resizable = TRUE,
+          pagination = FALSE,
+          showPageInfo = FALSE,
+          outlined = TRUE,
+          bordered = TRUE,
+          striped = TRUE,
+          highlight = TRUE,
+          compact = TRUE,
+          fullWidth = TRUE,
+          wrap = FALSE,
+          height = 390,
+          defaultColDef = colDef(vAlign = "center"),
+          columns = list(
+            `Date` = colDef(width = 100, format = colFormat(digits = 2)),
+            `Time` = colDef(width = 100, format = colFormat(digits = 2)),
+            `Movement` = colDef(width = 150, format = colFormat(digits = 2)),
+            `Position` = colDef(width = 150, format = colFormat(digits = 2)),
+            `Max Force` = colDef(width = 100, format = colFormat(digits = 2)),
+            `Avg. Force` = colDef(width = 100, format = colFormat(digits = 2)),
+            `RFD` = colDef(width = 100, format = colFormat(digits = 2)),
+            `Time Pk. Force` = colDef(width = 125, format = colFormat(digits = 2)),
+            `Impulse` = colDef(width = 100, format = colFormat(digits = 2))
+          )
+        )
+      })
+    } else {
+      output$logsTale <- NULL
+    }
+  }
+}
+
+
+# Define server logic required to draw a histogram
+server <- function(input, output) {
+  
+  currPlayerName <- reactive({
+    input$playerName
+  })
+  
+  convert_name_format <- function(name) {
+    name_parts <- strsplit(name, "\\s+")[[1]]
+    if(length(name_parts) == 2) {
+      converted_name <- paste(name_parts[2], name_parts[1], sep = ", ")
+    } else {
+      converted_name <- name
+    }
+    
+    return(converted_name)
+  }
+  
+  lastFirstName <- reactive({
+    convert_name_format(currPlayerName())
+  })
+    
+  currCmjData <- reactive({
+    cmjData %>% 
+      filter(Name == currPlayerName())
+  })
+  
+  currDynamoData <- reactive({
+    dynamoData %>% 
+      filter(Name == currPlayerName())
+  })
+  
+  currTrackmanData <- reactive({
+    trackmanData %>% 
+      filter(Pitcher == lastFirstName())
+  })
+  
+  observe({
+    req(input$tabs)
+    
+    output$flagsTable <- NULL
+    output$cmjSummaryTable <- NULL
+    output$dynamoSummaryTable <- NULL
+    output$dynamoSummaryTitle <- NULL
+    output$trackmanSummaryTable <- NULL
+    output$trackmanSummaryTitle <- NULL
+    output$logsTable <- NULL
+    
+    
+    currCmjData <- currCmjData() %>% 
+      rename(
+        BW_KG = BW..KG.,
+        Additional_Load_lb = Additional.Load..lb.,
+        Jump_Height_Imp_Mom = Jump.Height..Imp.Mom...cm..,
+        Peak_Landing_Force = Peak.Landing.Force..N..,
+        Peak_Power = Peak.Power...BM..W.kg..,
+        RSI_mod = RSI.modified..m.s..
+      ) %>% 
+      mutate(BW_LB = BW_KG * 2.20462)
+    
+    currDynamoData <- currDynamoData() %>% 
+      rename(
+        Body_Region = Body.Region,
+        L_Reps = L.Reps,
+        R_Reps = R.Reps,
+        N_Reps = N.Reps,
+        L_Max_Force = L.Max.Force..N.,
+        R_Max_Force = R.Max.Force..N.,
+        N_Max_Force = N.Max.Force..N.,
+        L_Avg_Force = L.Avg.Force..N.,
+        R_Avg_Force = R.Avg.Force..N.,
+        N_Avg_Force = N.Avg.Force..N.,
+        Force_Asymmetry = Force.Asymmetry....,
+        L_RFD = L.RFD..N.s.,
+        R_RFD = R.RFD..N.s.,
+        N_RFD = N.RFD..N.s.,
+        L_Time_Peak_Force = L.Time.to.Peak.Force..s.,
+        R_Time_Peak_Force = R.Time.to.Peak.Force..s.,
+        N_Time_Peak_Force = N.Time.to.Peak.Force..s.,
+        L_Impulse = L.Impulse..N.s.,
+        R_Impulse = R.Impulse..N.s.,
+        N_Impulse = N.Impulse..N.s.,
+        L_Max_ROM = L.Max.ROM....,
+        R_Max_ROM = R.Max.ROM....,
+        N_Max_ROM = N.Max.ROM....,
+        L_Avg_ROM = L.Avg.ROM....,
+        R_Avg_ROM = R.Avg.ROM....,
+        N_Avg_ROM = N.Avg.ROM....,
+        ROM_Asymmetry = ROM.Asymmetry....
+      )
+    
+    if(input$tabs == "summaryTab"){
+      summaryServer(input,
+                    output,
+                    currPlayerName(),
+                    currCmjData,
+                    currDynamoData,
+                    currTrackmanData())
+    } else if(input$tabs == "workloadDashboard") {
+      dashboardServer(input,
+                    output,
+                    currPlayerName(),
+                    currCmjData,
+                    currDynamoData,
+                    currTrackmanData())
+    }
+  })
+}
+
+# Run the application 
+shinyApp(ui = ui, server = server)
