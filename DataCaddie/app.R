@@ -9,12 +9,16 @@ library(ggplot2)
 library(ggrepel)
 library(plotly)
 
+
 theme <- bs_theme(
   version = 5,
   bootswatch = "lux",
-  fg = "rgb(0, 0, 40)",
-  bg = "#fff",
-  font_scale = NULL
+  # Explicitly set navbar colors
+  bg = "#ffffff",               # page background
+  fg = "rgb(0, 0, 40)",        # default text color (not navbar)
+  primary = "#001f3f",          # navy for primary elements (links/buttons)
+  "navbar-bg" = "#001f3f",      # navy navbar background
+  "navbar-color" = "#ffffff"    # white navbar text
 )
 
 library(showtext)
@@ -727,6 +731,16 @@ ui <- page_navbar(
                 background-color: #FFF9C4 !important;
                 border-top: 4px solid #FFF9C4;
                 border-bottom: 4px solid #FFF9C4;
+              }
+              
+              .navbar-brand {
+                color: white !important;
+              }
+              .nav-link {
+                color: #bbb !important;  /* light grey */
+              }
+              .nav-link:hover, .nav-link:focus {
+                color: white !important;
               }
               
            ")),
