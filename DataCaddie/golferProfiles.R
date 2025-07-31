@@ -1,0 +1,583 @@
+library(shiny)
+library(bslib)
+library(reactable)
+library(mongolite)
+library(tidyverse)
+library(shinyWidgets)
+library(htmltools)
+library(ggplot2)
+library(ggrepel)
+library(plotly)
+library(showtext)
+
+source("utils.R")
+source("playersDataFunctions.R")
+
+serverGolferProfiles <- function(input, output, session, favorite_players,
+                                 playersInTournament, playersInTournamentTourneyNameConv,
+                                 playersInTournamentPgaNames) {
+  
+  # Golfer Profiles Player Picker and Star
+  output$gp_picker_with_star <- renderUI({
+    
+    # Set Dropdown to unique Tournament Player Names
+    players <- unique(salaries$player)
+    players_tourney_names <- vapply(players, nameFanduelToTournament, character(1))
+    
+    # Set first player as default selected
+    selected_player <- input$gp_player
+    if (is.null(selected_player) || !(selected_player %in% players_tourney_names)) {
+      selected_player <- players_tourney_names[1]
+    }
+    
+    
+    favs <- favorite_players$names
+    star <- if (selected_player %in% favs) "★" else "☆"
+    
+    # Set star on click action
+    onclick_js <- sprintf(
+      "Shiny.setInputValue('favorite_clicked', '%s', {priority: 'event'})",
+      selected_player
+    )
+    
+    # Output Star and Player Dropdown Next to each other
+    tagList(
+      div(style = "display: flex;
+                   gap: 0px;
+                   align-items: center;
+          ",
+          tags$span(
+            star,
+            style = "
+              font-size: 35px;
+              color: gold;
+              user-select: none;
+              cursor: pointer;
+              display: flex;
+              align-items: center;
+              height: 50px;
+              line-height: 1;
+              margin-right: -3px;
+              z-index: 10;
+            ",
+            onclick = onclick_js
+          ),
+          shinyWidgets::pickerInput(
+            inputId = "gp_player",
+            label = NULL,
+            choices = players_tourney_names,
+            selected = selected_player,
+            options = list(`live-search` = TRUE)
+          )
+      )
+    )
+  })
+  
+  # Golfer Profiles Salary Cards
+  output$gp_salaries <- renderUI({
+    req(input$gp_player)
+    
+    # Convert to FD Name to get salary
+    fdName <- nameToFanduel(input$gp_player)
+    
+    player_salaries <- salaries %>%
+      filter(player == fdName) %>%
+      slice(1)
+    
+    if (nrow(player_salaries) == 0) {
+      return("No salary data available")
+    }
+    
+    div(
+      style = "
+      width: 300px;
+      margin-left: auto;
+      margin-right: auto;
+      margin-top: -15px;
+      z-index: 10;
+    ",
+      div(
+        style = "
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        justify-content: center;
+      ",
+        # FanDuel mini-card
+        div(
+          style = "
+          flex: 1 1 80px;
+          border: 1px solid #007bff;
+          border-radius: 6px;
+          padding: 1px 4px 4px 4px;
+          color: #007bff;
+          text-align: center;
+          background-color: #f9f9f9;
+        ",
+          tags$strong("FanDuel", style = "line-height: 1; font-size: 0.9em;"),
+          tags$p(
+            paste0("$", player_salaries$fdSalary),
+            style = "font-size: 1.1em; font-weight: 600; margin: 0; line-height: 1;"
+          )
+        ),
+        # DraftKings mini-card
+        div(
+          style = "
+          flex: 1 1 80px;
+          border: 1px solid #28a745;
+          border-radius: 6px;
+          padding: 1px 4px 4px 4px;
+          color: #28a745;
+          text-align: center;
+          background-color: #f9f9f9;
+        ",
+          tags$strong("DraftKings", style = "line-height: 1; font-size: 0.9em;"),
+          tags$p(
+            paste0("$", player_salaries$dkSalary),
+            style = "font-size: 1.1em; font-weight: 600; margin: 0; line-height: 1;"
+          )
+        )
+      )
+    )
+  })
+  
+  # Stat Summary Panel
+  output$gp_spider_plot <- renderUI({
+    req(input$gp_player)
+    
+    num_rounds <- 50
+    
+    finalData <- get_spider_plot_data(favorite_players, playersInTournament, num_rounds, input$gp_player)
+    
+    r_closed <- c(finalData$player_s, finalData$player_s[1])
+    theta_closed <- c(finalData$stat, finalData$stat[1])
+    player_vals_closed <- c(finalData$player, finalData$player[1])
+    stat_labels_closed <- c(finalData$stat, finalData$stat[1])
+    
+    r_closedF <- c(finalData$avg_s, finalData$avg_s[1])
+    field_vals_closed <- c(finalData$average, finalData$average[1])
+    
+    # Output Radar Plot
+    output$gp_summary_radar <- renderPlotly({
+      plot_ly(
+        type = 'scatterpolar',
+        fill = 'toself',
+        showlegend = TRUE
+      ) %>%
+        add_trace(
+          r = r_closed,
+          theta = theta_closed,
+          name = input$gp_player,
+          mode = "lines+markers",
+          text = paste0(input$gp_player, ": <br>",
+                        stat_labels_closed,": ", player_vals_closed, "<br>"),
+          hoverinfo = "text",
+          marker = list(color = "navy"),
+          line = list(color = "navy"),
+          fillcolor = "rgba(0, 0, 128, 0.3)",
+          connectgaps = TRUE
+        ) %>%
+        add_trace(
+          r = r_closedF,
+          theta = theta_closed,
+          name = 'Field',
+          mode = "lines+markers",
+          text = paste0("Field: <br>",
+                        stat_labels_closed, ": ", field_vals_closed, "<br>"),
+          hoverinfo = "text",
+          marker = list(color = "#FF6666"),
+          line = list(color = "#FF6666"),
+          fillcolor = "rgba(255, 102, 102, 0.2)",
+          connectgaps = TRUE
+        ) %>%
+        layout(
+          polar = list(
+            radialaxis = list(
+              visible = TRUE,
+              range = c(-3.2, 3.2),
+              showline = FALSE,
+              showticklabels = FALSE
+            ),
+            angularaxis = list(
+              tickfont = list(size = 9)
+            )
+          ),
+          margin = list(l = 0, r = 0, t = 30, b = 60),
+          width = 300,
+          height = 250,
+          showlegend = FALSE
+        ) %>%
+        config(displayModeBar = FALSE)
+    })
+    
+    tagList(
+      div(
+        style = "width: 100%, max-width: 350px; margin: auto; text-align: center;",
+        plotlyOutput("gp_summary_radar", height = "250px", width = "100%")
+      )
+    )
+  })
+  
+  allData <- get_all_player_data(c(), playersInTournament, 36)
+  
+  # For each stat, attempt to setup 'bar' plots for stat (only if active)
+  # Note: stat_config is in utils.R
+  for (stat_category in names(stat_config)) {
+    
+    # Grab component that configures this bar plot
+    config <- stat_config[[stat_category]]
+    
+    local({
+      config_inner <- config
+      
+      makeBarPlot(stat_category, config_inner, input, output, playersInTournament)
+    })
+  }
+  
+  # Render Golfer Stats Table (if non 'bar' plot tabs selected)
+  render_gp_stat_table(input, output, input$gp_player, playersInTournament, stat_config)
+  
+}
+
+
+
+
+#### Helper Functions ----------------------------------------------------------
+
+
+
+## Spider Plot -----------------------------------------------------------------
+get_spider_plot_data <- function(favorite_players, players_in_tournament, num_rounds, currPlayer) {
+  
+  allData <- get_all_player_data(favorite_players, players_in_tournament, num_rounds)
+  allData <- allData$data
+  
+  stat_cols <- c("sgPutt", "sgArg", "sgApp", "sgOtt", "Dr. Dist", "Dr. Acc")
+  norm_stat_cols <- paste0(stat_cols, "_norm")
+  
+  averages <- sapply(stat_cols, function(col) {
+    round(mean(allData[[col]], na.rm = TRUE), 2)
+  })
+  
+  playerData <- allData %>%
+    filter(player == currPlayer) %>%
+    select(all_of(stat_cols))
+  
+  playerDataVec <- round(as.numeric(playerData[1, ]), 2)
+  
+  playerNormData <- allData %>%
+    filter(player == currPlayer) %>%
+    select(all_of(norm_stat_cols))
+  
+  playerNormVec <- as.numeric(playerNormData[1, ])
+  
+  stat_labels <- c("SG: PUTT", "SG: ARG", "SG: APP", "SG: OTT", "DR. DIST", "DR. ACC")
+  
+  finalData <- data.frame(
+    stat = stat_labels,
+    player = playerDataVec,
+    player_s = playerNormVec,
+    average = averages,
+    avg_s = rep(0, length(stat_labels))
+  )
+  
+  return(finalData)
+}
+
+## Bar Plots -------------------------------------------------------------------
+makeBarPlot <- function(stat_category, config, input, output, playersInTournament) {
+  
+  # Setup UI Component for Bar Plot
+  plot_id <- paste0("gp_", tolower(stat_category), "_multi_plot")
+  ui_id <- paste0("gp_stat_", tolower(stat_category))
+  
+  # Make area for Plot Output if Stat is Selected
+  output[[ui_id]] <- renderUI({
+    req(input$gp_stat_selected == stat_category)
+    
+    make_barplot_area(plot_id, config$num_stats, config$title)
+  })
+  
+  # Render Plot Output
+  render_barplot_output(input, output, plot_id, playersInTournament, stat_category, config)
+}
+
+make_barplot_area <- function(plot_id, num_stats, title = NULL) {
+  # Dynamically generates UI component plot area for plotting stat bars
+  
+  height_per <- 35
+  total_height <- height_per * num_stats
+  
+  tagList(
+    if (!is.null(title)) {
+      tags$h5(title, class = "text-dark fw-bold mb-2")
+    },
+    div(
+      style = "margin-top: -25px;",
+      plotOutput(plot_id, height = paste0(total_height, "px"))
+    )
+  )
+}
+
+render_barplot_output <- function(input, output, plot_id, playersInTournament, tab_name, config) {
+  
+  # Grabs plot data and renders plot in output for 'bar' plots in golfer profiles
+  
+  output[[plot_id]] <- renderPlot({
+    
+    req(input$gp_stat_selected == tab_name)
+    req(input$gp_player)
+    
+    plot_data <- getBarPlotData(
+      input$gp_player,
+      playersInTournament,
+      36,
+      config
+    )
+    
+    createBarPlot(plot_data)
+  })
+}
+
+getBarPlotData <- function(currPlayer, playersInTournament, num_rounds, config) {
+  
+  # Get all player data
+  allData <- get_all_player_data(c(), playersInTournament, num_rounds)
+  allData <- allData$data
+  
+  # Get current player data
+  playerData <- allData %>% 
+    filter(player == currPlayer)
+  
+  # Get stat names, normalized stat names
+  allStats <- c(config$stats, config$rev_stats)
+  normStats <- paste0(allStats, "_norm")
+  stat_labels <- config$stat_labels
+  
+  # Bind together a row for each stat in all stats to create plot data dataframe
+  plot_data <- do.call(rbind, lapply(seq_along(allStats), function(i) {
+    stat <- allStats[i]
+    normStat <-  normStats[i]
+    
+    column_data <- suppressWarnings(as.numeric(allData[[stat]]))
+    if(all(is.na(column_data))) return(NULL)
+    
+    avg_val <- mean(column_data, na.rm = TRUE)
+    avg_std <- 0
+    
+    player_val <- playerData[[stat]]
+    player_std <- playerData[[normStat]]
+    
+    data.frame(
+      stat = stat_labels[stat],
+      player = round(player_val, 2),
+      player_s = player_std,
+      average = round(avg_val, 2),
+      avg_s = avg_std
+    )
+  }))
+  
+  if (is.null(plot_data)) return(NULL)
+  
+  plot_data$stat <- factor(plot_data$stat, levels = unique(rev(stat_labels[allStats])))
+  
+  return(plot_data)
+}
+
+createBarPlot <- function(plot_data) {
+  # Creates horizontal 'bar' plot to visualize player stats in golfer profiles
+  
+  plot_data$y_pos <- as.numeric(plot_data$stat) * 0.6  # numeric y for positioning
+  
+  bar_thickness <- 0.4
+  
+  ggplot(plot_data, aes(y = y_pos)) +
+    
+    geom_rect(aes(xmin = -3, xmax = 3,
+                  ymin = y_pos - bar_thickness/2, ymax = y_pos + bar_thickness/2),
+              fill = "#d9d9d9", color = NA) +
+    
+    geom_rect(aes(xmin = pmin(0, player_s), xmax = pmax(0, player_s),
+                  ymin = y_pos - bar_thickness/2, ymax = y_pos + bar_thickness/2,
+                  fill = player_s)) +
+    
+    geom_segment(data = plot_data, 
+                 aes(x = -3, xend = -3, y = y_pos - bar_thickness / 2, yend = y_pos + bar_thickness / 2), 
+                 color = "grey70", linewidth = 2) +
+    geom_segment(data = plot_data, 
+                 aes(x = 0, xend = 0, y = y_pos - bar_thickness / 2, yend = y_pos + bar_thickness / 2), 
+                 color = "grey70", linewidth = 1) +
+    geom_segment(data = plot_data, 
+                 aes(x = 3, xend = 3, y = y_pos - bar_thickness / 2, yend = y_pos + bar_thickness / 2), 
+                 color = "grey70", linewidth = 2) +
+    
+    geom_text(aes(x = pmax(0, player_s) + 0.1, 
+                  label = player),
+              hjust = 0, 
+              size = 4,
+              family = "Almari-Bold"
+    ) +
+    
+    scale_fill_gradient2(
+      low = "#F83E3E",
+      mid = "white",
+      high = "#4579F1",
+      midpoint = 0,
+      guide = "none"
+    ) +
+    
+    scale_x_continuous(limits = c(-3, 4), expand = c(0, 0)) +
+    
+    scale_y_continuous(breaks = plot_data$y_pos, labels = plot_data$stat) +
+    
+    theme_minimal(base_size = 12) +
+    theme(
+      axis.title = element_blank(),
+      axis.text.x = element_blank(),
+      axis.ticks = element_blank(),
+      panel.grid = element_blank(),
+      plot.margin = margin(5, 15, 5, 5),
+      axis.text.y = element_text(size = 12, margin = margin(r = 10), family = "Almari-Bold", color = "black")
+    )
+}
+
+## Summary Table ---------------------------------------------------------------
+
+render_gp_stat_table <- function(input, output, currPlayer, playersInTournament, config) {
+  
+  req(input$gp_player)
+  
+  # Get all players data
+  allData <- get_all_player_data(c(), playersInTournament, 36)
+  allData <- allData$data
+  
+  playerData <- allData %>% 
+    filter(player == currPlayer)
+  playerData <- as.data.frame(playerData)
+  
+  # Configure UI Component (reactable)
+  ui_id <- "gp_stat_summary"
+  
+  # Make area for Table Output if Stat is Selected
+  output[[ui_id]] <- renderUI({
+    req(input$gp_stat_selected == "SUMMARY")
+    
+    tagList(
+      div(
+        style = "margin-top: -5px; overflow-x: hidden;",
+        reactableOutput("gpSummaryTable", width = "100%")
+      )
+    )
+  })
+  
+  # Render Reactable (only if input$gp_stat_selected == "SUMMARY")
+  makeGpSummaryTable(input, output, playerData, config)
+}
+
+makeGpSummaryTable <- function(input, output, playerData, config) {
+  
+  output$gpSummaryTable <- renderReactable({
+    req(input$gp_stat_selected == "SUMMARY")
+    
+    stat_labels <- c(
+      "sgOtt" = "SG: OTT",
+      "Dr. Dist" = "DR. DIST",
+      "Dr. Acc" = "DR. ACC",
+      
+      "sgApp" = "SG: APP",
+      "App. 50-75" = "APP 50-75",
+      "App. 75-100" = "APP 75-100",
+      "App. 100-125" = "APP 100-125",
+      "App. 125-150" = "APP 125-150",
+      "App. 150-175" = "APP 150-175",
+      "App. 175-200" = "APP 175-200",
+      "App. 200_up" = "APP 200+",
+      "GIR%" = "GIR %",
+      "Proximity" = "PROXIMITY",
+      "Rough Prox." = "ROUGH PROX",
+      
+      "sgArg" = "SG: ARG",
+      "Scrambling" = "SCRAMBLING",
+      "SandSave%" = "SAND SAVE %",
+      
+      "sgPutt" = "SG: PUTT",
+      "Putt BOB%" = "PUTT BOB%",
+      "3 Putt Avd" = "3 PUTT AVD",
+      "Bonus Putt." = "BONUS PUTT",
+      
+      "Par 3 Score" = "PAR 3 AVG",
+      "Par 4 Score" = "PAR 4 AVG",
+      "Par 5 Score" = "PAR 5 AVG",
+      "BOB%" = "BOB %",
+      "Bog. Avd" = "BOGEY AVD"
+    )
+    
+    all_stats <- names(stat_labels)
+    
+    # Generate table rows and background color for each value
+    table_data <- do.call(rbind, lapply(all_stats, function(stat) {
+      norm_stat <- paste0(stat, "_norm")
+      
+      value <- if (stat %in% names(playerData)) {
+        round(as.numeric(playerData[[stat]]), 2)
+      } else {
+        NA
+      }
+      
+      percentile <- if (norm_stat %in% names(playerData)) {
+        round(pnorm(as.numeric(playerData[[norm_stat]])) * 100)
+      } else {
+        NA
+      }
+      
+      bg_color <- if (norm_stat %in% names(playerData)) {
+        val <- as.numeric(playerData[[norm_stat]])
+        val_scaled <- (val + 3) / 6
+        val_scaled <- pmin(pmax(val_scaled, 0), 1)
+        color <- rgb(colorRamp(c("#F83E3E", "white", "#4579F1"))(val_scaled), maxColorValue = 255)
+        color
+      } else {
+        "white"
+      }
+      
+      data.frame(
+        Stat = stat_labels[[stat]],
+        Value = value,
+        ValueColor = bg_color,
+        Percentile = if (!is.na(percentile)) paste0(percentile, "%") else NA,
+        stringsAsFactors = FALSE
+      )
+    }))
+    
+    reactable(
+      table_data[, c("Stat", "Value", "Percentile")],
+      columns = list(
+        Stat = colDef(name = "Stat", align = "center", width = 130),
+        Value = colDef(
+          name = "Value",
+          align = "center",
+          width = 80,
+          style = function(value, index) {
+            color <- table_data$ValueColor[index]
+            list(background = color)
+          }
+        ),
+        Percentile = colDef(name = "%", align = "center", width = 60)
+      ),
+      pagination = FALSE,
+      showPageInfo = FALSE,
+      onClick = NULL,
+      outlined = TRUE,
+      bordered = TRUE,
+      striped = TRUE,
+      highlight = TRUE,
+      compact = TRUE,
+      fullWidth = TRUE,
+      theme = reactableTheme(
+        style = list(fontSize = "12px"),
+        headerStyle = list(fontSize = "15px"),
+        rowStyle = list(height = "25px")
+      )
+    )
+  })
+}
