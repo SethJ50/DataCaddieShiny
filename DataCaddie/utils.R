@@ -16,8 +16,12 @@ showtext_auto()
 
 #### DB Connection and Data
 
-db_url = "mongodb://localhost"
-#db_url = "mongodb://localhost:27017"
+# Connect to local MongoDB
+#db_url = "mongodb://localhost"
+
+## Connect to Digital Ocean MongoDB
+# ssh into droplet using the following: ssh -L 27017:localhost:27017 root@64.23.155.37
+db_url = "mongodb://localhost:27017"
 
 mongo_connection <- mongo(collection = "tournamentrows",
                           db = "data_caddy",
