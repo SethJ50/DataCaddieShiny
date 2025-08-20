@@ -210,6 +210,281 @@ serverGolferProfiles <- function(input, output, session, favorite_players,
         config(displayModeBar = FALSE)
     })
     
+    output$gp_recent_rounds <- renderReactable({
+      req(input$gp_player)
+      
+      eventData <- getEventRoundsData(input$gp_player)
+      roundData <- getIndRoundsData(input$gp_player)
+      
+      if (!"finish" %in% names(eventData)) {
+        eventData$finish <- NA
+      }
+      if (!"finish" %in% names(roundData)) {
+        roundData$finish <- NA
+      }
+      
+      eventData$event_key <- paste(eventData$Date, eventData$tournament, sep = "_")
+      roundData$event_key <- paste(roundData$Date, roundData$tournament, sep = "_")
+      
+      col_labels <- c(
+        "Dates" = "Date",
+        "finish" = "Finish",
+        "tournament" = "Tournament",
+        "sgPutt" = "SG: PUTT",
+        "sgArg" = "SG: ARG",
+        "sgApp" = "SG: APP",
+        "sgOtt" = "SG: OTT",
+        "sgT2G" = "SG: T2G",
+        "sgTot" = "SG: TOT"
+      )
+      
+      num_stats <- c("sgPutt","sgArg","sgApp","sgOtt","sgT2G","sgTot")
+      
+      event_stat_ranges <- list(
+        sgPutt = c(-8, 8),
+        sgArg  = c(-5, 5),
+        sgApp  = c(-10, 10),
+        sgOtt  = c(-5, 5),
+        sgT2G  = c(-12, 12),
+        sgTot  = c(-20, 20)
+      )
+      
+      round_stat_ranges <- list(
+        sgPutt = c(-4, 4),
+        sgArg  = c(-3, 3),
+        sgApp  = c(-5, 5),
+        sgOtt  = c(-3, 3),
+        sgT2G  = c(-7, 7),
+        sgTot  = c(-10, 10)
+      )
+      
+      getColor <- function(value, range) {
+        if (is.na(value)) return("white")
+        min_val <- range[1]; max_val <- range[2]
+        val_scaled <- (value - min_val) / (max_val - min_val)
+        val_scaled <- pmin(pmax(val_scaled, 0), 1)
+        rgb(colorRamp(c("#F83E3E", "white", "#4579F1"))(val_scaled), maxColorValue = 255)
+      }
+      
+      style_sg <- function(value, range) {
+        value <- round(as.numeric(value), 2)
+        list(
+          background = getColor(value, range),
+          fontSize = "11px",
+          overflow = "hidden",
+          textOverflow = "ellipsis",
+          whiteSpace = "nowrap",
+          textAlign = "center",
+          padding = "2px 4px"
+        )
+      }
+      
+      reactable(
+        eventData,
+        columns = list(
+          player = colDef(show = FALSE),
+          Date = colDef(
+            name = "Date",
+            width = 95,
+            align = "center",
+            style = function(value) list(
+              fontSize = "11px",
+              textAlign = "center",
+              padding = "2px 4px"
+            ),
+            cell = function(value) div(
+              style = list(
+                overflow = "hidden",
+                whiteSpace = "nowrap"
+              ),
+              title = value,  # shows full text on hover
+              value
+            )
+          ),
+          finish = colDef(
+            name = "Fin",
+            width = 35,
+            align = "center"
+          ),
+          
+          tournament = colDef(
+            name = "Tournament",
+            width = 140,
+            align = "center",
+            style = function(value) list(
+              fontSize = "11px",
+              textAlign = "center",
+              padding = "2px 2px"
+            ),
+            cell = function(value) div(
+              style = list(
+                overflow = "hidden",
+                whiteSpace = "nowrap"
+              ),
+              title = value,  # shows full text on hover
+              value
+            )
+          ),
+          
+          Round = colDef(
+            width = 55,
+            style = function(value) list(
+              fontSize = "11px",
+              textAlign = "center",
+              padding = "2px 2px"
+            )
+          ),
+          sgPutt = colDef(name = "SG:PUTT", width = 72,
+                          style = function(value) style_sg(value, event_stat_ranges$sgPutt),
+                          cell = function(value) div(title = round(as.numeric(value), 2), round(as.numeric(value), 2))
+          ),
+          sgArg = colDef(name = "SG:ARG", width = 67,
+                         style = function(value) style_sg(value, event_stat_ranges$sgArg),
+                         cell = function(value) div(title = round(as.numeric(value), 2), round(as.numeric(value), 2))
+          ),
+          sgApp = colDef(name = "SG:APP", width = 67,
+                         style = function(value) style_sg(value, event_stat_ranges$sgApp),
+                         cell = function(value) div(title = round(as.numeric(value), 2), round(as.numeric(value), 2))
+          ),
+          sgOtt = colDef(name = "SG:OTT", width = 67,
+                         style = function(value) style_sg(value, event_stat_ranges$sgOtt),
+                         cell = function(value) div(title = round(as.numeric(value), 2), round(as.numeric(value), 2))
+          ),
+          sgT2G = colDef(name = "SG:T2G", width = 67,
+                         style = function(value) style_sg(value, event_stat_ranges$sgT2G),
+                         cell = function(value) div(title = round(as.numeric(value), 2), round(as.numeric(value), 2))
+          ),
+          sgTot = colDef(name = "SG:TOT", width = 67,
+                         style = function(value) style_sg(value, event_stat_ranges$sgTot),
+                         cell = function(value) div(title = round(as.numeric(value), 2), round(as.numeric(value), 2))
+          ),
+          event_key = colDef(show = FALSE)
+        ),
+        details = function(index) {
+          key <- eventData$event_key[index]
+          sub_rounds <- roundData[roundData$event_key == key, ]
+          
+          sub_rounds$Blank <- ""
+          
+          desired_order <- c(
+            "Blank", "Date", "finish", "tournament", "Round",
+            "sgPutt", "sgArg", "sgApp", "sgOtt", "sgT2G", "sgTot",
+            "event_key", "player"
+          )
+
+          desired_order <- intersect(desired_order, names(sub_rounds))
+          sub_rounds <- sub_rounds[, desired_order, drop = FALSE]
+          
+          reactable(
+            sub_rounds,
+            columns = list(
+              player = colDef(show = FALSE),
+              Blank = colDef(
+                width = 44,
+                cell = function(value) ""
+              ),
+              Date = colDef(
+                name = "Date",
+                width = 95,
+                style = function(value) list(
+                  fontSize = "11px",
+                  textAlign = "center",
+                  padding = "2px 2px"
+                ),
+                cell = function(value) div(
+                  style = list(
+                    overflow = "hidden",
+                    whiteSpace = "nowrap"
+                  ),
+                  title = value,  # shows full text on hover
+                  value
+                )
+              ),
+              finish = colDef(
+                name = "Fin",
+                width = 35,
+                align = "center"
+              ),
+              tournament = colDef(
+                name = "Tournament",
+                width = 140,
+                style = function(value) list(
+                  fontSize = "11px",
+                  textAlign = "center",
+                  padding = "2px 2px"
+                ),
+                cell = function(value) div(
+                  style = list(
+                    overflow = "hidden",
+                    whiteSpace = "nowrap"
+                  ),
+                  title = value,  # shows full text on hover
+                  value
+                )
+              ),
+              
+              Round = colDef(
+                width = 55,
+                style = function(value) list(
+                  fontSize = "11px",
+                  textAlign = "center",
+                  padding = "2px 4px"
+                )
+              ),
+              sgPutt = colDef(name = "SG:PUTT", width = 72,
+                              style = function(value) style_sg(value, round_stat_ranges$sgPutt),
+                              cell = function(value) div(title = round(as.numeric(value), 2), round(as.numeric(value), 2))
+              ),
+              sgArg = colDef(name = "SG:ARG", width = 67,
+                             style = function(value) style_sg(value, round_stat_ranges$sgArg),
+                             cell = function(value) div(title = round(as.numeric(value), 2), round(as.numeric(value), 2))
+              ),
+              sgApp = colDef(name = "SG:APP", width = 67,
+                             style = function(value) style_sg(value, round_stat_ranges$sgApp),
+                             cell = function(value) div(title = round(as.numeric(value), 2), round(as.numeric(value), 2))
+              ),
+              sgOtt = colDef(name = "SG:OTT", width = 67,
+                             style = function(value) style_sg(value, round_stat_ranges$sgOtt),
+                             cell = function(value) div(title = round(as.numeric(value), 2), round(as.numeric(value), 2))
+              ),
+              sgT2G = colDef(name = "SG:T2G", width = 67,
+                             style = function(value) style_sg(value, round_stat_ranges$sgT2G),
+                             cell = function(value) div(title = round(as.numeric(value), 2), round(as.numeric(value), 2))
+              ),
+              sgTot = colDef(name = "SG:TOT", width = 67,
+                             style = function(value) style_sg(value, round_stat_ranges$sgTot),
+                             cell = function(value) div(title = round(as.numeric(value), 2), round(as.numeric(value), 2))
+              ),
+              event_key = colDef(show = FALSE)
+            ),
+            pagination = FALSE,
+            bordered = TRUE,
+            compact = TRUE,
+            highlight = TRUE,
+            fullWidth = TRUE,
+            theme = reactableTheme(
+              style = list(fontSize = "12px"),
+              headerStyle = list(display = "none"),
+              rowStyle = list(height = "25px")
+            ),
+          )
+        },
+        pagination = FALSE,
+        searchable = TRUE,
+        bordered = TRUE,
+        striped = TRUE,
+        highlight = TRUE,
+        compact = TRUE,
+        fullWidth = TRUE,
+        theme = reactableTheme(
+          style = list(fontSize = "12px"),
+          headerStyle = list(fontSize = "12px"),
+          rowStyle = list(height = "25px")
+        )
+      )
+      
+    })
+    
     tagList(
       div(
         style = "width: 100%, max-width: 350px; margin: auto; text-align: center;",
@@ -625,4 +900,36 @@ makeGpSummaryTable <- function(input, output, playerData, config) {
       )
     )
   })
+}
+
+
+
+#### Recent Rounds Table ------------------------------------------------------
+
+getEventRoundsData <- function(playerName) {
+  
+  # Develop Last N Data
+  lastNData <- data %>% 
+    filter(Round == "Event") %>% 
+    mutate(Date = as.Date(dates, format = "%m/%d/%y")) %>%
+    arrange(player, desc(Date)) %>%
+    group_by(player) %>% 
+    filter(player == playerName) %>% 
+    select(Date, finish, tournament, Round, sgPutt, sgArg, sgApp, sgOtt, sgT2G, sgTot)
+  
+  return(lastNData)
+}
+
+getIndRoundsData <- function(playerName) {
+  
+  # Develop Last N Data
+  lastNData <- data %>% 
+    filter(Round != "Event") %>% 
+    mutate(Date = as.Date(dates, format = "%m/%d/%y")) %>%
+    arrange(player, desc(Date)) %>%
+    group_by(player) %>% 
+    filter(player == playerName) %>% 
+    select(Date, finish, tournament, Round, sgPutt, sgArg, sgApp, sgOtt, sgT2G, sgTot)
+  
+  return(lastNData)
 }

@@ -238,7 +238,11 @@ ui <- page_navbar(
                )
              ),
              card(
-               "Recent Rounds"
+               "Recent Rounds",
+               div(
+                 style = "",
+                 reactableOutput("gp_recent_rounds")
+               )
              )
            )
            
