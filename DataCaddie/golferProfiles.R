@@ -305,7 +305,7 @@ makeBarPlot <- function(stat_category, config, input, output, playersInTournamen
 make_barplot_area <- function(plot_id, num_stats, title = NULL) {
   # Dynamically generates UI component plot area for plotting stat bars
   
-  height_per <- 35
+  height_per <- 25
   total_height <- height_per * num_stats
   
   tagList(
@@ -391,42 +391,54 @@ createBarPlot <- function(plot_data) {
   
   bar_thickness <- 0.4
   
+  seg_thickness <- 5
+  
   ggplot(plot_data, aes(y = y_pos)) +
     
-    geom_rect(aes(xmin = -3, xmax = 3,
-                  ymin = y_pos - bar_thickness/2, ymax = y_pos + bar_thickness/2),
-              fill = "#d9d9d9", color = NA) +
+    # Background "track"
+    geom_segment(
+      aes(x = -3, xend = 3, y = y_pos, yend = y_pos),
+      color = "#e9e9e9",
+      linewidth = seg_thickness,
+      lineend = "round"
+    ) +
     
-    geom_rect(aes(xmin = pmin(0, player_s), xmax = pmax(0, player_s),
-                  ymin = y_pos - bar_thickness/2, ymax = y_pos + bar_thickness/2,
-                  fill = player_s)) +
+    # Player's bar (colored, can extend left or right from zero)
+    geom_segment(
+      aes(x = pmin(0, player_s), xend = pmax(0, player_s),
+          y = y_pos, yend = y_pos, color = player_s),
+      linewidth = seg_thickness,
+      lineend = "butt"
+    ) +
     
-    geom_segment(data = plot_data, 
-                 aes(x = -3, xend = -3, y = y_pos - bar_thickness / 2, yend = y_pos + bar_thickness / 2), 
-                 color = "grey70", linewidth = 2) +
-    geom_segment(data = plot_data, 
-                 aes(x = 0, xend = 0, y = y_pos - bar_thickness / 2, yend = y_pos + bar_thickness / 2), 
-                 color = "grey70", linewidth = 1) +
-    geom_segment(data = plot_data, 
-                 aes(x = 3, xend = 3, y = y_pos - bar_thickness / 2, yend = y_pos + bar_thickness / 2), 
-                 color = "grey70", linewidth = 2) +
+    # Rounded cap at the "outer" end of player bar
+    geom_point(
+      aes(x = player_s, y = y_pos, colour = player_s),
+      size = seg_thickness,  # scale dot size to thickness
+      shape = 16,                  # filled circle
+      stroke = 0
+    ) +
     
-    geom_text(aes(x = pmax(0, player_s) + 0.1, 
+    # Reference tick
+    geom_segment(aes(x = 0, xend = 0, y = y_pos - 0.15, yend = y_pos + 0.15),
+                 color = "grey70", linewidth = 0.8) +
+    
+    geom_text(aes(x = pmax(0, player_s) + 0.175, 
                   label = player),
               hjust = 0, 
-              size = 4,
+              size = 5,
               family = "Almari-Bold"
     ) +
     
-    scale_fill_gradient2(
+    scale_colour_gradient2(
       low = "#F83E3E",
-      mid = "white",
+      mid = "grey80",
       high = "#4579F1",
       midpoint = 0,
       guide = "none"
     ) +
     
-    scale_x_continuous(limits = c(-3, 4), expand = c(0, 0)) +
+    scale_x_continuous(limits = c(-3.25, 4), expand = c(0, 0)) +
     
     scale_y_continuous(breaks = plot_data$y_pos, labels = plot_data$stat) +
     
@@ -437,7 +449,7 @@ createBarPlot <- function(plot_data) {
       axis.ticks = element_blank(),
       panel.grid = element_blank(),
       plot.margin = margin(5, 15, 5, 5),
-      axis.text.y = element_text(size = 12, margin = margin(r = 10), family = "Almari-Bold", color = "black")
+      axis.text.y = element_text(size = 18, family = "Almari-Bold", color = "black") # Stat Names
     )
 }
 
@@ -448,7 +460,7 @@ render_gp_stat_table <- function(input, output, currPlayer, playersInTournament,
   req(input$gp_player)
   
   # Get all players data
-  allData <- get_all_player_data(c(), playersInTournament, 36)
+  allData <- get_all_player_data(c(), playersInTournament, 50)
   allData <- allData$data
   
   playerData <- allData %>% 
@@ -512,6 +524,19 @@ makeGpSummaryTable <- function(input, output, playerData, config) {
       "Bog. Avd" = "BOGEY AVD"
     )
     
+    # Map stats to categories
+    stat_categories <- c(
+      "sgOtt" = "Off-the-Tee", "Dr. Dist" = "Off-the-Tee", "Dr. Acc" = "Off-the-Tee",
+      "sgApp" = "Approach", "App. 50-75" = "Approach", "App. 75-100" = "Approach",
+      "App. 100-125" = "Approach", "App. 125-150" = "Approach", "App. 150-175" = "Approach",
+      "App. 175-200" = "Approach", "App. 200_up" = "Approach", "GIR%" = "Approach",
+      "Proximity" = "Approach", "Rough Prox." = "Approach",
+      "sgArg" = "Around the Green", "Scrambling" = "Around the Green", "SandSave%" = "Around the Green",
+      "sgPutt" = "Putting", "Putt BOB%" = "Putting", "3 Putt Avd" = "Putting", "Bonus Putt." = "Putting",
+      "Par 3 Score" = "Scoring", "Par 4 Score" = "Scoring", "Par 5 Score" = "Scoring",
+      "BOB%" = "Scoring", "Bog. Avd" = "Scoring"
+    )
+    
     all_stats <- names(stat_labels)
     
     # Generate table rows and background color for each value
@@ -530,10 +555,9 @@ makeGpSummaryTable <- function(input, output, playerData, config) {
         NA
       }
       
-      bg_color <- if (norm_stat %in% names(playerData)) {
-        val <- as.numeric(playerData[[norm_stat]])
-        val_scaled <- (val + 3) / 6
-        val_scaled <- pmin(pmax(val_scaled, 0), 1)
+      bg_color <- if (!is.na(percentile)) {
+        # scale percentile 0-100 to 0-1
+        val_scaled <- percentile / 100
         color <- rgb(colorRamp(c("#F83E3E", "white", "#4579F1"))(val_scaled), maxColorValue = 255)
         color
       } else {
@@ -545,25 +569,46 @@ makeGpSummaryTable <- function(input, output, playerData, config) {
         Value = value,
         ValueColor = bg_color,
         Percentile = if (!is.na(percentile)) paste0(percentile, "%") else NA,
+        Category = stat_categories[[stat]],
         stringsAsFactors = FALSE
       )
     }))
     
+    # Create category-level table
+    categories <- unique(table_data$Category)
+    category_table <- data.frame(Category = categories, stringsAsFactors = FALSE)
+    
     reactable(
-      table_data[, c("Stat", "Value", "Percentile")],
-      columns = list(
-        Stat = colDef(name = "Stat", align = "center", width = 130),
-        Value = colDef(
-          name = "Value",
-          align = "center",
-          width = 80,
-          style = function(value, index) {
-            color <- table_data$ValueColor[index]
-            list(background = color)
-          }
-        ),
-        Percentile = colDef(name = "%", align = "center", width = 60)
-      ),
+      category_table,
+      columns = list(Category = colDef(name = "Stat Category", align = "left")),
+      details = function(index) {
+        cat_name <- category_table$Category[index]
+        sub_data <- table_data[table_data$Category == cat_name, c("Stat", "Value", "Percentile", "ValueColor")]
+        
+        reactable(
+          sub_data,
+          columns = list(
+            Stat = colDef(name = "Stat", align = "center", width = 170),
+            Value = colDef(
+              name = "Value",
+              align = "center",
+              width = 80,
+              style = function(value, index) {
+                color <- sub_data$ValueColor[index]
+                list(background = color)
+              }
+            ),
+            Percentile = colDef(name = "%", align = "center", width = 60),
+            ValueColor = colDef(show=FALSE)
+          ),
+          pagination = FALSE,
+          showPageInfo = FALSE,
+          bordered = TRUE,
+          compact = TRUE,
+          fullWidth = TRUE,
+          highlight = TRUE
+        )
+      },
       pagination = FALSE,
       showPageInfo = FALSE,
       onClick = NULL,

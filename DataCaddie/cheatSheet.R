@@ -146,10 +146,16 @@ serverCheatSheet <- function(input, output, session, favorite_players, playersIn
           player_name <- cheatSheetData$player[index]
           is_fav <- player_name %in% favorite_players$names
           star <- if (is_fav) "★" else "☆"
-          htmltools::tags$span(
-            star,
-            style = "cursor:pointer; font-size: 18px; color: gold;",
-            onclick = sprintf("Shiny.setInputValue('favorite_clicked', '%s', {priority: 'event'})", player_name)
+          
+          htmltools::div(
+            htmltools::span(
+              star,
+              style = "cursor:pointer; font-size: 18px; color: gold;",
+              onclick = sprintf(
+                "Shiny.setInputValue('favorite_clicked', '%s', {priority: 'event'})",
+                player_name
+              )
+            )
           )
         }
       )
@@ -181,6 +187,8 @@ serverCheatSheet <- function(input, output, session, favorite_players, playersIn
     }
     
     col_defs[["isFavorite"]] <- colDef(show = FALSE)
+    
+    cheatSheetData$`.favorite` <- ""
     
     reactable(
       cheatSheetData,
