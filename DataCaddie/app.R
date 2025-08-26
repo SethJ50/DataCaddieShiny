@@ -1,6 +1,7 @@
 library(shiny)
 library(bslib)
 library(reactable)
+library(reactable.extras)
 library(mongolite)
 library(tidyverse)
 library(shinyWidgets)
@@ -27,6 +28,7 @@ source("cheatSheet.R")
 source("golferProfiles.R")
 source("utils.R")
 source("playersDataFunctions.R")
+source("customModel.R")
 
 ui <- page_navbar(
   title = "DataCaddie",
@@ -246,6 +248,87 @@ ui <- page_navbar(
              )
            )
            
+  ),
+  tabPanel("Custom Model",
+           tags$style(HTML("
+            #modelStatPicker + .dropdown-toggle,
+            #modelStatPicker + .dropdown-toggle.btn {
+              min-width: 200px;
+              max-width: 400px;
+              height: 50px;
+              line-height: 50px;
+              font-size: 16px;
+              margin-bottom: -10px;
+              background-color: #fafafa;
+              border: 1px solid #ddd;
+              border-radius: 4px;
+            }
+            
+            .weight-input input.form-control {
+              width: 70px !important;   /* fixed width */
+              max-width: 70px !important;
+              min-width: 70px !important;
+              padding: 3px 3px;
+              text-align: center;
+              background-color: #fafafa;
+              border: 1px solid #ddd;
+              border-radius: 4px;
+            }
+            
+            .weight-stat-row {
+              width: 100%;
+              min-width: 280px;
+              max-width: 350px;
+              border: 1px solid #ddd;
+              border-radius: 4px;
+              padding: 6px 10px;
+              margin-bottom: 6px;
+              background-color: #fafafa;
+              margin-left: auto;
+              margin-right: auto;
+            }
+            
+            .weight-stat-label {
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              height: 100%;
+            }
+            
+            
+          ")),
+           
+           layout_columns(
+             col_widths = c(3, 9),
+             fill = TRUE,
+             card(
+               div(
+                 shinyWidgets::pickerInput( 
+                   inputId = "modelStatPicker",
+                   label = "Choose Model Stats:",
+                   choices = modelStatsOptions,
+                   selected = c("sgTotPga"),
+                   multiple = TRUE,
+                   options = list(
+                     `actions-box` = TRUE,
+                     `live-search` = TRUE,
+                     `selected-text-format` = "count > 2",
+                     `none-selected-text` = "No columns selected"
+                   ),
+                   width = "100%"
+                 )
+               ),
+               div(
+                 style = "margin-top: 15px; padding: 0px 10px 0px 10px;",
+                 uiOutput("selectedModelStats")
+               )
+             ),
+             card(
+               div(
+                 
+               )
+             )
+           )         
   )
 )
 
@@ -276,6 +359,10 @@ server <- function(input, output, session) {
       serverCheatSheet(input, output, session, favorite_players, playersInTournament)
     } else if(input$siteTabs == "Golfer Profiles") {
       serverGolferProfiles(input, output, session, favorite_players,
+                           playersInTournament, playersInTournamentTourneyNameConv,
+                           playersInTournamentPgaNames)
+    } else if(input$siteTabs == "Custom Model"){
+      serverCustomModel(input, output, session, favorite_players,
                            playersInTournament, playersInTournamentTourneyNameConv,
                            playersInTournamentPgaNames)
     } else {
