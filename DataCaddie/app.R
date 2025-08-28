@@ -318,9 +318,23 @@ ui <- page_navbar(
                    width = "100%"
                  )
                ),
+               hr(),
                div(
-                 style = "margin-top: 15px; padding: 0px 10px 0px 10px;",
-                 uiOutput("selectedModelStats")
+                 style = "padding: 0px 10px 0px 10px;",
+                 uiOutput("selectedModelStats"),
+                 hr(),
+                 div(
+                   style = "display: flex; justify-content: center; align-items: center; margin-top: 20px;",
+                   strong("Total Model Weights:"),
+                   span(
+                     style = "margin-left: 35px;",
+                     textOutput("totalWeight", inline = TRUE)
+                   )
+                 ),
+                 div(
+                   style = "margin-top: 10px; text-align: center;",
+                   actionButton("submitModel", "Submit", class = "btn-primary", style = "padding: 3px 10px; border-radius: 4px;")
+                 )
                )
              ),
              card(
