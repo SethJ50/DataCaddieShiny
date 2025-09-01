@@ -339,7 +339,18 @@ ui <- page_navbar(
              ),
              card(
                div(
-                 
+                 shinyWidgets::pickerInput(
+                   inputId = "model_platform",
+                   label = "Platform:",
+                   choices = c("FanDuel", "DraftKings"),
+                   selected = "FanDuel",
+                   width = "150px",
+                   options = list(
+                     style = "btn-light",   # button style
+                     size = 5
+                   )
+                 ),
+                 reactableOutput("model_output")
                )
              )
            )         

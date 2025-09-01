@@ -163,16 +163,13 @@ serverCustomModel <- function(input, output, session, favorite_players,
   
   # Reactive total weight as model weights are added
   totalWeight <- reactive({
-    weight_ids <- grep("^weight_", names(input), value = TRUE)
+    req(input$modelStatPicker)
     
-    vals <- vapply(weight_ids, function(id) {
-      val <- input[[id]]
-      if (is.null(val) || val == "") {
-        0
-      } else {
-        suppressWarnings(as.numeric(val))
-      }
-    }, numeric(1))
+    vals <- sapply(input$modelStatPicker, function(stat) {
+      input_id <- paste0("weight_", stat)
+      val <- input[[input_id]]
+      if (is.null(val) || val == "") 0 else as.numeric(val)
+    }, USE.NAMES = FALSE)
     
     sum(vals, na.rm = TRUE)
   })
@@ -244,7 +241,7 @@ serverCustomModel <- function(input, output, session, favorite_players,
     #   average based on standard normal distribution
     model_stats_df$Rating <- round(pnorm(model_stats_df$weighted_avg) * 100, 1)
     
-    View(model_stats_df)
+    updateModelTable(model_stats_df, output, input$model_platform)
     
   })
 }
@@ -258,6 +255,117 @@ serverCustomModel <- function(input, output, session, favorite_players,
 
 
 #### Supplementary Functions ---------------------------------------------------
+updateModelTable <- function(model_stats, output, platform) {
+  
+  model_stats <- as.data.frame(model_stats)
+  
+  model_output_data <- model_stats %>% 
+    select(-matches("_norm$"), -weighted_avg) %>% 
+    mutate(
+      `FD Value` = round(1000 * (Rating / fdSalary), 2),
+      `DK Value` = round(1000 * (Rating / dkSalary), 2),
+    )
+  
+  if (platform == "FanDuel") {
+    fixed_cols <- c("player", "fdSalary", "FD Value", "Rating")
+  } else { # DraftKings
+    fixed_cols <- c("player", "dkSalary", "DK Value", "Rating")
+  }
+  
+  remaining_cols <- setdiff(names(model_output_data), fixed_cols)
+  model_output_data <- model_output_data[, c(fixed_cols, remaining_cols), drop = FALSE]
+  
+  model_output_data <- model_output_data %>%
+    rename(
+      "Player" = player,
+      "FD Salary" = fdSalary,
+      "DK Salary" = dkSalary
+    )
+  
+  display_names <- setNames(names(modelStatsOptions), modelStatsOptions)
+  
+  # Coloring function for stat cells
+  getColor <- function(value) {
+    if (is.na(value)) return("white")
+    value_clipped <- pmax(pmin(value, 3), -3)
+    val_scaled <- (value_clipped + 3) / 6
+    rgb(colorRamp(c("#F83E3E", "white", "#4579F1"))(val_scaled), maxColorValue = 255)
+  }
+  
+  # Coloring function for Rating cells
+  getRatingColor <- function(value) {
+    if (is.na(value)) return("white")
+    val_scaled <- pmax(pmin(value, 100), 0) / 100
+    rgb(colorRamp(c("#F83E3E", "white", "#4579F1"))(val_scaled), maxColorValue = 255)
+  }
+  
+  col_defs <- lapply(names(model_output_data), function(col) {
+    
+    display_col <- ifelse(col %in% names(display_names), display_names[[col]], col)
+    
+    # Primary columns
+    if (col %in% c("Player", "FD Salary", "FD Value", "DK Salary", "DK Value", "Rating")) {
+      width_val <- switch(col,
+                          "Player" = 200,
+                          "Rating" = 80,
+                          100)
+      
+      return(colDef(
+        width = width_val,
+        align = "center",
+        vAlign = "center",
+        sticky = "left",             # <--- freeze this column
+        header = function(value) htmltools::tags$div(title = display_col, display_col),
+        cell = function(value) htmltools::tags$div(title = value, value)
+      ))
+    }
+    
+    # Other stat columns: color by _norm
+    norm_col <- paste0(col, "_norm")
+    if (!(norm_col %in% names(model_stats))) norm_col <- NULL
+    
+    colDef(
+      align = "center",
+      vAlign = "center",
+      header = function(value) htmltools::tags$div(title = display_col, display_col),
+      style = function(value, index) {
+        bg <- if (!is.null(norm_col)) getColor(model_stats[[norm_col]][index]) else "white"
+        list(background = bg)
+      }
+    )
+    
+  })
+  
+  names(col_defs) <- names(model_output_data)
+  
+  output$model_output <- renderReactable({
+    reactable(
+      model_output_data,
+      searchable = TRUE,
+      resizable = TRUE,
+      pagination = FALSE,
+      showPageInfo = FALSE,
+      onClick = NULL,
+      outlined = TRUE,
+      bordered = TRUE,
+      striped = TRUE,
+      highlight = TRUE,
+      compact = TRUE,
+      fullWidth = TRUE,
+      wrap = FALSE,
+      defaultSortOrder = "desc",
+      defaultSorted = "Rating",
+      showSortIcon = FALSE,
+      theme = reactableTheme(
+        style = list(fontSize = "15px"),
+        rowStyle = list(height = "25px")
+      ),
+      defaultColDef = colDef(vAlign = "center", align = "center", width = 100),
+      columns = col_defs
+    )
+  })
+}
+
 getDataForModel <- function(playersInTournament) {
   last12SGData <- getLastNSg(data, playersInTournament, 12)
   last24SGData <- getLastNSg(data, playersInTournament, 24)
