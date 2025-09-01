@@ -307,7 +307,7 @@ ui <- page_navbar(
                    inputId = "modelStatPicker",
                    label = "Choose Model Stats:",
                    choices = modelStatsOptions,
-                   selected = c("sgTotPga"),
+                   selected = c("SG Tot PGA"),
                    multiple = TRUE,
                    options = list(
                      `actions-box` = TRUE,

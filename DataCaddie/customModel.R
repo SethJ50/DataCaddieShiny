@@ -17,74 +17,74 @@ source("playersDataFunctions.R")
 
 modelStatsOptions <- c(
   "Display" = "real",
-  "SG: PUTT PGA" = "sgPuttPga",
-  "SG: ARG PGA" = "sgArgPga",
-  "SG: APP PGA" = "sgAppPga",
-  "SG: OTT PGA" = "sgOttPga",
-  "SG: T2G PGA" = "sgT2GPga",
-  "SG: TOT PGA" = "sgTotPga",
+  "SG: PUTT PGA" = "SG Putt PGA",
+  "SG: ARG PGA" = "SG Arg PGA",
+  "SG: APP PGA" = "SG App PGA",
+  "SG: OTT PGA" = "SG Ott PGA",
+  "SG: T2G PGA" = "SG T2G PGA",
+  "SG: TOT PGA" = "SG Tot PGA",
   
-  "SG: PUTT L12" = "sgPuttL12",
-  "SG: ARG L12" = "sgArgL12",
-  "SG: APP L12" = "sgAppL12",
-  "SG: OTT L12" = "sgOttL12",
-  "SG: T2G L12" = "sgT2GL12",
-  "SG: TOT L12" = "sgTotL12",
+  "SG: PUTT L12" = "sgPutt_12",
+  "SG: ARG L12" = "sgArg_12",
+  "SG: APP L12" = "sgApp_12",
+  "SG: OTT L12" = "sgOtt_12",
+  "SG: T2G L12" = "sgT2G_12",
+  "SG: TOT L12" = "sgTot_12",
   
-  "SG: PUTT L24" = "sgPuttL24",
-  "SG: ARG L24" = "sgArgL24",
-  "SG: APP L24" = "sgAppL24",
-  "SG: OTT L24" = "sgOttL24",
-  "SG: T2G L24" = "sgT2GL24",
-  "SG: TOT L24" = "sgTotL24",
+  "SG: PUTT L24" = "sgPutt_24",
+  "SG: ARG L24" = "sgArg_24",
+  "SG: APP L24" = "sgApp_24",
+  "SG: OTT L24" = "sgOtt_24",
+  "SG: T2G L24" = "sgT2G_24",
+  "SG: TOT L24" = "sgTot_24",
   
-  "SG: PUTT L36" = "sgPuttL36",
-  "SG: ARG L36" = "sgArgL36",
-  "SG: APP L36" = "sgAppL36",
-  "SG: OTT L36" = "sgOttL36",
-  "SG: T2G L36" = "sgT2GL36",
-  "SG: TOT L36" = "sgTotL36",
+  "SG: PUTT L36" = "sgPutt_36",
+  "SG: ARG L36" = "sgArg_36",
+  "SG: APP L36" = "sgApp_36",
+  "SG: OTT L36" = "sgOtt_36",
+  "SG: T2G L36" = "sgT2G_36",
+  "SG: TOT L36" = "sgTot_36",
   
-  "SG: PUTT L50" = "sgPuttL50",
-  "SG: ARG L50" = "sgArgL50",
-  "SG: APP L50" = "sgAppL50",
-  "SG: OTT L50" = "sgOttL50",
-  "SG: T2G L50" = "sgT2GL50",
-  "SG: TOT L50" = "sgTotL50",
+  "SG: PUTT L50" = "sgPutt_50",
+  "SG: ARG L50" = "sgArg_50",
+  "SG: APP L50" = "sgApp_50",
+  "SG: OTT L50" = "sgOtt_50",
+  "SG: T2G L50" = "sgT2G_50",
+  "SG: TOT L50" = "sgTot_50",
   
-  "DR. DIST" = "drDist",
-  "DR. ACC" = "drAcc",
-  "BOB%" = "bob%",
-  "BOG AVD" = "bogAvd",
-  "SAND SAVE %" = "sandSave%",
-  "SCRAMBLING" = "scrambling",
-  "PAR 3 AVG" = "par3Avg",
-  "PAR 4 AVG" = "par4Avg",
-  "PAR 5 AVG" = "par5Avg",
-  "GIR %" = "gir%",
-  "PROXIMITY" = "prox",
-  "ROUGH PROX" = "roughProx",
+  "DR. DIST" = "Dr. Dist",
+  "DR. ACC" = "Dr. Acc",
+  "BOB%" = "BOB%",
+  "BOG AVD" = "Bog. Avd",
+  "SAND SAVE %" = "SandSave%",
+  "SCRAMBLING" = "Scrambling",
+  "PAR 3 AVG" = "Par 3 Score",
+  "PAR 4 AVG" = "Par 4 Score",
+  "PAR 5 AVG" = "Par 5 Score",
+  "GIR %" = "GIR%",
+  "PROXIMITY" = "Proximity",
+  "ROUGH PROX" = "Rough Prox.",
   
-  "APP 50-75" = "app50_75",
-  "APP 75-100" = "app75_100",
-  "APP 100-125" = "app100_125",
-  "APP 125-150" = "app125_150",
-  "APP 150-175" = "app150_175",
-  "APP 175-200" = "app175_200",
-  "APP 200+" = "app200",
+  "APP 50-75" = "App. 50-75",
+  "APP 75-100" = "App. 75-100",
+  "APP 100-125" = "App. 100-125",
+  "APP 125-150" = "App. 125-150",
+  "APP 150-175" = "App. 150-175",
+  "APP 175-200" = "App. 175-200",
+  "APP 200+" = "App. 200_up",
   
-  "BONUS PUTT" = "bonusPutt",
-  "3 PUTT AVD" = "threePuttAvd",
+  "BONUS PUTT" = "Bonus Putt.",
+  "3 PUTT AVD" = "3 Putt Avd",
   
-  "SG EASY FIELD" = "sgEasyField",
-  "SG MEDIUM FIELD" = "sgMedField",
-  "SG HARD FIELD" = "sgHardField",
+  "SG EASY FIELD" = "SG Easy Field Adjusted",
+  "SG MEDIUM FIELD" = "SG Medium Field Adjusted",
+  "SG HARD FIELD" = "SG Hard Field Adjusted",
   
-  "SG EASY COURSE" = "sgEasyCourse",
-  "SG MEDIUM COURSE" = "sgMedCourse",
-  "SG HARD COURSE" = "sgHardCourse",
+  "SG EASY COURSE" = "SG Easy Course Adjusted",
+  "SG MEDIUM COURSE" = "SG Medium Course Adjusted",
+  "SG HARD COURSE" = "SG Hard Course Adjusted",
   
-  "COURSE HISTORY" = "courseHistory"
+  "COURSE HISTORY" = "Course History"
 )
 
 serverCustomModel <- function(input, output, session, favorite_players,
@@ -186,6 +186,12 @@ serverCustomModel <- function(input, output, session, favorite_players,
   observeEvent(input$submitModel, {
     req(input$modelStatPicker)
     
+    # Keys: labels, Values: Pretty Names
+    modelStatNames <- setNames(
+      names(modelStatsOptions),
+      modelStatsOptions
+    )
+    
     weights <- sapply(input$modelStatPicker, function(stat) {
       val <- rv_weights[[stat]]
       if (is.null(val) || val == "") 0 else as.numeric(val)
@@ -197,8 +203,6 @@ serverCustomModel <- function(input, output, session, favorite_players,
       stringsAsFactors = FALSE
     )
     
-    print(weights_df)
-    
     # Grab dataframe full of player's data for all stats
     model_data <- getDataForModel(playersInTournament)
     
@@ -208,24 +212,11 @@ serverCustomModel <- function(input, output, session, favorite_players,
     player_cols <- c("player", "fdSalary", "dkSalary")
     model_stats <- weights_df$stat
     
-    roundSgStats <- c("sgPuttL12", "sgArgL12", "sgAppL12", "sgOttL12", "sgT2GL12", "sgTotL12",
-                      "sgPuttL24", "sgArgL24", "sgAppL24", "sgOttL24", "sgT2GL24", "sgTotL24",
-                      "sgPuttL36", "sgArgL36", "sgAppL36", "sgOttL36", "sgT2GL36", "sgTotL36",
-                      "sgPuttL50", "sgArgL50", "sgAppL50", "sgOttL50", "sgT2GL50", "sgTotL50",
-                      )
-    
     selected_cols <- player_cols
     
     for (stat in model_stats) {
-      if (stat %in% roundSgStats) {
-        # For round-based stats: grab stat_N and stat_norm_N
-        raw_col <- paste0(stat, "_N")
-        norm_col <- paste0(stat, "_norm_N")
-      } else {
-        # For all other stats: grab stat and stat_norm
-        raw_col <- stat
-        norm_col <- paste0(stat, "_norm")
-      }
+      raw_col <- stat
+      norm_col <- paste0(stat, "_norm")
       
       # Only include columns that exist in model_data
       if (raw_col %in% names(model_data)) selected_cols <- c(selected_cols, raw_col)
@@ -235,11 +226,26 @@ serverCustomModel <- function(input, output, session, favorite_players,
     model_stats_df <- model_data[, selected_cols, drop = FALSE]
     
     # Create weighted average of the stats based on input weights using norm stat values
+    norm_cols <- paste0(model_stats, "_norm")
+    norm_cols <- norm_cols[norm_cols %in% names(model_stats_df)]
+    
+    weights_vec <- setNames(weights_df$weight, paste0(weights_df$stat, "_norm"))
+    weights_vec <- weights_vec[norm_cols]
+    
+    model_stats_df$weighted_avg <- apply(
+      model_stats_df[, norm_cols, drop = FALSE], 1,
+      function(row) {
+        if (sum(weights_vec) == 0) return(NA)
+        sum(row * weights_vec, na.rm = TRUE) / sum(weights_vec)
+      }
+    )
     
     # Based on this weighted average, get a 'Rating' - the percentile of each weighted
     #   average based on standard normal distribution
+    model_stats_df$Rating <- round(pnorm(model_stats_df$weighted_avg) * 100, 1)
     
-    # Save this data as a dataframe
+    View(model_stats_df)
+    
   })
 }
 
@@ -259,39 +265,44 @@ getDataForModel <- function(playersInTournament) {
   last50SGData <- getLastNSg(data, playersInTournament, 50)
   
   fav_players <- c() # TODO
-  all_last12 <- get_all_player_data(fav_players, playersInTournament, 12)
-  all_last12 <- all_last12$data
-  all_last24 <- get_all_player_data(fav_players, playersInTournament, 24)
-  all_last24 <- all_last24$data
-  all_last36 <- get_all_player_data(fav_players, playersInTournament, 36)
-  all_last36 <- all_last36$data
-  all_last50 <- get_all_player_data(fav_players, playersInTournament, 50)
-  all_last50 <- all_last50$data
-  
-  # For all_lastN for N = 12, 24, 36, and 50 rename the columns in
-  #   (sgPutt, sgArg, sgApp, sgOtt, sgT2G, sgTot), and each of these with "_norm" at the end
-  #   to append N to the end of each of their names.
+  all_last12 <- get_all_player_data(fav_players, playersInTournament, 12)$data
+  all_last24 <- get_all_player_data(fav_players, playersInTournament, 24)$data
+  all_last36 <- get_all_player_data(fav_players, playersInTournament, 36)$data
+  all_last50 <- get_all_player_data(fav_players, playersInTournament, 50)$data
   
   # columns to rename
   sg_cols <- c("sgPutt", "sgArg", "sgApp", "sgOtt", "sgT2G", "sgTot")
   sg_cols_norm <- paste0(sg_cols, "_norm")
   cols_to_rename <- c(sg_cols, sg_cols_norm)
   
+  # Custom renamer
   rename_with_suffix <- function(df, N) {
-    df %>% 
-      rename_with(.fn = ~ paste0(.x, "_", N), .cols = all_of(cols_to_rename))
+    df %>%
+      rename_with(
+        .fn = function(cols) {
+          # vectorized handling of column names
+          case_when(
+            cols %in% sg_cols ~ paste0(cols, "_", N),
+            cols %in% sg_cols_norm ~ gsub("_norm$", paste0("_", N, "_norm"), cols),
+            TRUE ~ cols
+          )
+        },
+        .cols = all_of(cols_to_rename)
+      )
   }
   
   all_last12 <- rename_with_suffix(all_last12, 12) %>%
-    select(player, ends_with("_12"))
+    select(player, matches("_(12|12_norm)$"))
+  
   all_last24 <- rename_with_suffix(all_last24, 24) %>%
-    select(player, ends_with("_24"))
+    select(player, matches("_(24|24_norm)$"))
+  
   all_last36 <- rename_with_suffix(all_last36, 36) %>%
-    select(player, ends_with("_36"))
+    select(player, matches("_(36|36_norm)$"))
+  
   all_last50 <- rename_with_suffix(all_last50, 50)
   
-  # For all_lastN for N = 12, 24, 36, only grab those columns name changed...
-  # Join all of these with all_last50 by 'player'
+  # Join them all
   final_data <- all_last50 %>%
     left_join(all_last12, by = "player") %>%
     left_join(all_last24, by = "player") %>%

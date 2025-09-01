@@ -105,6 +105,12 @@ get_all_player_data <- function(favorite_players, playersInTournament, num_round
   # Get PGA Tour Stats
   pgatourStats <- getPgaStats(playersInTournamentPgaNames, pgaData, baseData)
   
+  # Get Field Strength Data
+  fieldStrengthData <- getFieldStrengthData(playersInTournament, data, 200)
+  
+  # Get Course Difficulty Data
+  courseDiffData <- getCourseDifficultyData(playersInTournament, data, 200)
+  
   # Get names of favorite players
   favs <- favorite_players$names
   
@@ -117,6 +123,10 @@ get_all_player_data <- function(favorite_players, playersInTournament, num_round
     left_join(playerFinishes, by = c("tourneyPlayerName" = "player")) %>%
     left_join(pgatourStats, by = c("pgaPlayerName" = "player")) %>%
     left_join(courseHistoryDf, by = c("pgaPlayerName" = "player")) %>% 
+    left_join(fieldStrengthData, by = c("player" = "player")) %>% 
+    left_join(courseDiffData, by = c("player" = "player")) %>% 
+    mutate(`Course History` = rowMeans(select(., minus1:minus5), na.rm = TRUE)) %>%
+    mutate(`Course History` = ifelse(is.nan(`Course History`), NA, `Course History`)) %>%
     mutate(
       isFavorite = player %in% favs
     )
@@ -156,6 +166,23 @@ getLastNSg <- function(data, playersInTournament, N) {
     )
   
   return(lastNData)
+}
+
+getLastNRounds <- function(data, playersInTournament, N) {
+  # Returns dataframe full of rows of last <=N rounds for each player in tourney
+  
+  playersInTournamentTourneyNameConv <- nameFanduelToTournament(playersInTournament)
+  
+  lastNRows <- data %>% 
+    filter(player %in% playersInTournamentTourneyNameConv, Round != "Event") %>% 
+    mutate(Date = as.Date(dates, format = "%m/%d/%y"),
+           tournamentyear = paste(tournament, format(Date, "%Y"))) %>% 
+    arrange(player, desc(Date)) %>% 
+    group_by(player) %>% 
+    slice_head(n = N) %>% 
+    ungroup()
+  
+  return(lastNRows)
 }
 
 getPgaStats <- function(playersInTournament, data, baseData){
@@ -250,6 +277,134 @@ getRecentHistoryDf <- function(playersInTournament, tenRecTournaments, data) {
   colnames(playerFinishes)[-1] <- new_col_names
   
   return(playerFinishes)
+}
+
+getCourseDifficultyData <- function(playersInTournament, data, N) {
+  
+  # Get last <= N Rounds of data for each player
+  lastNData <- getLastNRounds(data, playersInTournament, N)
+  
+  # Grab difficulty by course data
+  courseDiffData <- courseStatsData
+  
+  # Join course difficulty with each round
+  finalData <- lastNData %>% 
+    left_join(
+      courseDiffData %>% select(course, difficulty),
+      by = "course"
+    ) %>% 
+    select(player, sgTot, course, difficulty)
+  
+  # Add column indicating difficulty by string
+  finalData <- finalData %>% 
+    mutate(courseDiff = case_when(
+      difficulty <= -0.9 ~ "easy",
+      difficulty >= 0.9 ~ "hard",
+      TRUE ~ "medium"
+    ))
+  
+  overallAvg <- finalData %>% 
+    group_by(player) %>% 
+    summarise(overall_avg = mean(sgTot, na.rm = TRUE), .groups = "drop")
+  
+  # k = number of rounds before we are confident in measurement
+  k <- 36
+  
+  # Compute average SG on each course type for each player
+  summaryData <- finalData %>%
+    group_by(player, courseDiff) %>%
+    summarise(avg_sgTot = round(mean(sgTot, na.rm = TRUE), 2), n_rounds = n(), .groups = "drop") %>%
+    left_join(overallAvg, by = "player") %>% 
+    mutate(
+      adj_raw = avg_sgTot - overall_avg,
+      weight = n_rounds / (n_rounds + k),
+      adj_sgTot = round(weight * adj_raw, 2),
+      avg_sgTot = round(avg_sgTot, 2)
+    ) %>% 
+    select(player, courseDiff, avg_sgTot, adj_sgTot)
+  
+  # Rename columns
+  summaryData <- summaryData %>% 
+    pivot_wider(
+      names_from = courseDiff,
+      values_from = c(avg_sgTot, adj_sgTot),
+      names_glue = "{.value}_{courseDiff}",
+      values_fill = 0
+    ) %>% 
+    rename(
+      "SG Easy Course" = avg_sgTot_easy,
+      "SG Medium Course" = avg_sgTot_medium,
+      "SG Hard Course" = avg_sgTot_hard,
+      "SG Easy Course Adjusted" = adj_sgTot_easy,
+      "SG Medium Course Adjusted" = adj_sgTot_medium,
+      "SG Hard Course Adjusted" = adj_sgTot_hard
+    )
+  
+  return(summaryData)
+}
+
+getFieldStrengthData <- function(playersInTournament, data, N) {
+  
+  # Get last N rounds from every player
+  lastNData <- getLastNRounds(data, playersInTournament, N)
+  
+  # Get field strength data, add tournamentyear
+  fieldStrengthData <- fieldStrengthData %>% 
+    mutate(tournamentyear = paste(tournament, year))
+  
+  # Add 'strength' column from fieldStrengthData to lastNData by joining on equal tournamentYear values
+  finalData <- lastNData %>% 
+    left_join(
+      fieldStrengthData %>% select(tournamentyear, strength),
+      by = "tournamentyear"
+    ) %>% 
+    select(player, sgTot, tournamentyear, strength)
+  
+  # Mark Easy, Medium, and Hard field strenghts
+  finalData <- finalData %>% 
+    mutate(fieldType = case_when(
+      strength < -0.15 ~ "easy",
+      strength > 0.7 ~ "hard",
+      TRUE ~ "medium"
+    ))
+  
+  overallAvg <- finalData %>% 
+    group_by(player) %>% 
+    summarise(overall_avg = mean(sgTot, na.rm = TRUE), .groups = "drop")
+  
+  # k = number of rounds before we are confident in measurement
+  k <- 36
+  
+  # Compute average sgTot for each field type for each player
+  summaryData <- finalData %>%
+    group_by(player, fieldType) %>%
+    summarise(avg_sgTot = round(mean(sgTot, na.rm = TRUE), 2), n_rounds = n(), .groups = "drop") %>%
+    left_join(overallAvg, by = "player") %>% 
+    mutate(
+      adj_raw = avg_sgTot - overall_avg,
+      weight = n_rounds / (n_rounds + k),
+      adj_sgTot = round(weight * adj_raw, 2),
+      avg_sgTot = round(avg_sgTot, 2)
+    ) %>% 
+    select(player, fieldType, avg_sgTot, adj_sgTot)
+  
+  summaryData <- summaryData %>% 
+    pivot_wider(
+      names_from = fieldType,
+      values_from = c(avg_sgTot, adj_sgTot),
+      names_glue = "{.value}_{fieldType}",
+      values_fill = 0
+    ) %>% 
+    rename(
+      "SG Easy Field" = avg_sgTot_easy,
+      "SG Medium Field" = avg_sgTot_medium,
+      "SG Hard Field" = avg_sgTot_hard,
+      "SG Easy Field Adjusted" = adj_sgTot_easy,
+      "SG Medium Field Adjusted" = adj_sgTot_medium,
+      "SG Hard Field Adjusted" = adj_sgTot_hard
+    )
+  
+  return(summaryData)
 }
 
 getCourseHistoryDf <- function(playersInTournament, data) {

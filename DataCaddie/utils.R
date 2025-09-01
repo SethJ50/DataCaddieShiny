@@ -47,6 +47,18 @@ mongo_ch_conn <- mongo(collection = "coursehistories",
 
 courseHistoryData <- mongo_ch_conn$find('{}')
 
+mongo_coursestats_conn <- mongo(collection = "coursedifficulties",
+                                db = "data_caddy",
+                                url = db_url)
+
+courseStatsData <- mongo_coursestats_conn$find('{}')
+
+mongo_fieldstrength_conn <- mongo(collection = "fieldstrengths",
+                                db = "data_caddy",
+                                url = db_url)
+
+fieldStrengthData <- mongo_fieldstrength_conn$find('{}')
+
 
 #### Helper Functions
 
