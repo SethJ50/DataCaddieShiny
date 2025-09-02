@@ -227,6 +227,17 @@ serverCustomModel <- function(input, output, session, favorite_players,
     #   average based on standard normal distribution
     model_stats_df$Rating <- round(pnorm(model_stats_df$weighted_avg) * 100, 1)
     
+    # Add Favorites
+    favs <- favorite_players$names
+    
+    model_stats_df <- model_stats_df %>% 
+      mutate(
+        isFavorite = player %in% favs
+      )
+    
+    model_stats_df$.favorite <- NA
+    model_stats_df <- model_stats_df[, c(".favorite", setdiff(names(model_stats_df), ".favorite"))]
+    
     model_stats_df
   })
   
@@ -234,13 +245,18 @@ serverCustomModel <- function(input, output, session, favorite_players,
   observeEvent(input$submitModel, {
     
     # Use model stats to populate table UI
-    updateModelTable(modelTableData(), output, input$model_platform)
+    updateModelTable(modelTableData(), output, favorite_players, input$model_platform)
     
   })
   
   # On Platform dropdown change, update table
   observeEvent(input$model_platform, {
-    updateModelTable(modelTableData(), output, input$model_platform)
+    updateModelTable(modelTableData(), output, favorite_players, input$model_platform)
+  }, ignoreInit = TRUE)
+  
+  # On player favorited, update table
+  observeEvent(input$favorite_clicked, {
+    updateModelTable(modelTableData(), output, favorite_players, input$model_platform)
   }, ignoreInit = TRUE)
   
 }
@@ -254,7 +270,7 @@ serverCustomModel <- function(input, output, session, favorite_players,
 
 
 #### Supplementary Functions ---------------------------------------------------
-updateModelTable <- function(model_stats, output, platform) {
+updateModelTable <- function(model_stats, output, favorite_players, platform) {
   
   model_stats <- as.data.frame(model_stats)
   
@@ -307,6 +323,34 @@ updateModelTable <- function(model_stats, output, platform) {
     rgb(colorRamp(c("#F83E3E", "white", "#4579F1"))(val_scaled), maxColorValue = 255)
   }
   
+  model_output_data <- model_output_data[, c(".favorite", setdiff(names(model_output_data), ".favorite"))]
+  
+  favorite_col_def <- list(
+    .favorite = colDef(
+      name = "",
+      width = 28,
+      sticky = "left",
+      sortable = FALSE,
+      resizable = FALSE,
+      cell = function(value, index) {
+        player_name <- model_output_data$Player[index]
+        is_fav <- player_name %in% favorite_players$names
+        star <- if (is_fav) "★" else "☆"
+        
+        htmltools::div(
+          htmltools::span(
+            star,
+            style = "cursor:pointer; font-size: 18px; color: gold;",
+            onclick = sprintf(
+              "Shiny.setInputValue('favorite_clicked', '%s', {priority: 'event'})",
+              player_name
+            )
+          )
+        )
+      }
+    )
+  )
+  
   col_defs <- lapply(names(model_output_data), function(col) {
     
     display_col <- ifelse(col %in% names(display_names), display_names[[col]], col)
@@ -353,6 +397,10 @@ updateModelTable <- function(model_stats, output, platform) {
   
   names(col_defs) <- names(model_output_data)
   
+  col_defs <- c(favorite_col_def, col_defs)
+  
+  col_defs[["isFavorite"]] <- colDef(show = FALSE)
+  
   output$model_output <- renderReactable({
     reactable(
       model_output_data,
@@ -376,7 +424,15 @@ updateModelTable <- function(model_stats, output, platform) {
         rowStyle = list(height = "25px")
       ),
       defaultColDef = colDef(vAlign = "center", align = "center", width = 100),
-      columns = col_defs
+      columns = col_defs,
+      rowClass = JS("
+        function(rowInfo, index) {
+          if (rowInfo && rowInfo.row && rowInfo.row.isFavorite) {
+            return 'favorite-row';
+          }
+          return null;
+        }
+      ")
     )
   })
 }

@@ -250,6 +250,12 @@ ui <- page_navbar(
            
   ),
   tabPanel("Custom Model",
+           tags$head(tags$script(HTML("
+            Shiny.addCustomMessageHandler('favoriteClick', function(player) {
+              Shiny.setInputValue('favorite_clicked', player, {priority: 'event'});
+            });
+          "))),
+           
            tags$style(HTML("
             #modelStatPicker + .dropdown-toggle,
             #modelStatPicker + .dropdown-toggle.btn {
@@ -315,6 +321,12 @@ ui <- page_navbar(
               border: 1px solid #ddd;
               border-radius: 6px;
               margin-top: -5px;
+            }
+            
+            .favorite-row {
+                background-color: #FFF9C4 !important;
+                border-top: 4px solid #FFF9C4;
+                border-bottom: 4px solid #FFF9C4;
             }
             
           ")),
