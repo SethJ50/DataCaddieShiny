@@ -91,7 +91,7 @@ serverCustomModel <- function(input, output, session, favorite_players,
                               playersInTournament, playersInTournamentTourneyNameConv,
                               playersInTournamentPgaNames) {
   
-  # Create reactive values for weights of the model
+  # Create a reactive 'dictionary' of weights for model
   rv_weights <- reactiveValues()
   
   # Render Model Stats as Input Boxes below box dropdown
@@ -137,9 +137,11 @@ serverCustomModel <- function(input, output, session, favorite_players,
     )
   })
   
-  # Observe changes of weights (save) and clicks of remove stat button
+  # On a change of the modelStatPicker dropdown
   observe({
     req(input$modelStatPicker)
+    
+    # For each stat in the stat picker
     lapply(input$modelStatPicker, function(stat) {
       local({
         s <- stat
@@ -161,54 +163,37 @@ serverCustomModel <- function(input, output, session, favorite_players,
     })
   })
   
-  # Reactive total weight as model weights are added
-  totalWeight <- reactive({
-    req(input$modelStatPicker)
-    
-    vals <- sapply(input$modelStatPicker, function(stat) {
-      input_id <- paste0("weight_", stat)
-      val <- input[[input_id]]
-      if (is.null(val) || val == "") 0 else as.numeric(val)
-    }, USE.NAMES = FALSE)
-    
-    sum(vals, na.rm = TRUE)
+  # Create weights dataframe on change of weights
+  weights_df <- reactive({
+    data.frame(
+      stat = input$modelStatPicker,
+      weight = sapply(input$modelStatPicker, function(stat) {
+        val <- rv_weights[[stat]]
+        if (is.null(val) || val == "") 0 else as.numeric(val)
+      }, USE.NAMES = FALSE),
+      stringsAsFactors = FALSE
+    )
   })
   
-  # Update totalWeight text output upon model input changes
+  # On change of modelStatPicker, update totalWeight sum
+  totalWeight <- reactive({
+    req(input$modelStatPicker)
+    sum(weights_df()$weight, na.rm = TRUE)
+  })
+  
+  # Place totalWeight sum in output
   output$totalWeight <- renderText({
     totalWeight()
   })
   
-  # Observe 'Submit' Button Press
-  observeEvent(input$submitModel, {
-    req(input$modelStatPicker)
-    
-    # Keys: labels, Values: Pretty Names
-    modelStatNames <- setNames(
-      names(modelStatsOptions),
-      modelStatsOptions
-    )
-    
-    weights <- sapply(input$modelStatPicker, function(stat) {
-      val <- rv_weights[[stat]]
-      if (is.null(val) || val == "") 0 else as.numeric(val)
-    }, USE.NAMES = TRUE)
-    
-    weights_df <- data.frame(
-      stat = input$modelStatPicker,
-      weight = as.numeric(weights),
-      stringsAsFactors = FALSE
-    )
-    
+  # Model table data reactive on change of model stats
+  modelTableData <- reactive({
     # Grab dataframe full of player's data for all stats
     model_data <- getDataForModel(playersInTournament)
     
-    # Grab only the model stats, normalized versions for each value,
-    #     alongside player names, salaries on fd and dk
-    #     note, for model data sgPuttL36 = sgPutt_36 and sgPutt_norm_36 (normalized)
+    # Grab Player Name, Salaries on each site, and model stats and normalized versions
     player_cols <- c("player", "fdSalary", "dkSalary")
-    model_stats <- weights_df$stat
-    
+    model_stats <- weights_df()$stat
     selected_cols <- player_cols
     
     for (stat in model_stats) {
@@ -222,11 +207,12 @@ serverCustomModel <- function(input, output, session, favorite_players,
     
     model_stats_df <- model_data[, selected_cols, drop = FALSE]
     
+    
     # Create weighted average of the stats based on input weights using norm stat values
     norm_cols <- paste0(model_stats, "_norm")
     norm_cols <- norm_cols[norm_cols %in% names(model_stats_df)]
     
-    weights_vec <- setNames(weights_df$weight, paste0(weights_df$stat, "_norm"))
+    weights_vec <- setNames(weights_df()$weight, paste0(weights_df()$stat, "_norm"))
     weights_vec <- weights_vec[norm_cols]
     
     model_stats_df$weighted_avg <- apply(
@@ -241,9 +227,22 @@ serverCustomModel <- function(input, output, session, favorite_players,
     #   average based on standard normal distribution
     model_stats_df$Rating <- round(pnorm(model_stats_df$weighted_avg) * 100, 1)
     
-    updateModelTable(model_stats_df, output, input$model_platform)
+    model_stats_df
+  })
+  
+  # On 'Submit' Button Press, update table
+  observeEvent(input$submitModel, {
+    
+    # Use model stats to populate table UI
+    updateModelTable(modelTableData(), output, input$model_platform)
     
   })
+  
+  # On Platform dropdown change, update table
+  observeEvent(input$model_platform, {
+    updateModelTable(modelTableData(), output, input$model_platform)
+  }, ignoreInit = TRUE)
+  
 }
 
 
@@ -268,19 +267,28 @@ updateModelTable <- function(model_stats, output, platform) {
   
   if (platform == "FanDuel") {
     fixed_cols <- c("player", "fdSalary", "FD Value", "Rating")
+    exclude_cols <- c("dkSalary", "DK Value")
   } else { # DraftKings
     fixed_cols <- c("player", "dkSalary", "DK Value", "Rating")
+    exclude_cols <- c("fdSalary", "FD Value")
   }
   
-  remaining_cols <- setdiff(names(model_output_data), fixed_cols)
+  remaining_cols <- setdiff(names(model_output_data), c(fixed_cols, exclude_cols))
   model_output_data <- model_output_data[, c(fixed_cols, remaining_cols), drop = FALSE]
   
-  model_output_data <- model_output_data %>%
-    rename(
-      "Player" = player,
-      "FD Salary" = fdSalary,
-      "DK Salary" = dkSalary
-    )
+  if (platform == "FanDuel") {
+    model_output_data <- model_output_data %>%
+      rename(
+        "Player" = player,
+        "FD Salary" = fdSalary
+      )
+  } else { # DraftKings
+    model_output_data <- model_output_data %>%
+      rename(
+        "Player" = player,
+        "DK Salary" = dkSalary
+      )
+  }
   
   display_names <- setNames(names(modelStatsOptions), modelStatsOptions)
   
@@ -314,9 +322,15 @@ updateModelTable <- function(model_stats, output, platform) {
         width = width_val,
         align = "center",
         vAlign = "center",
-        sticky = "left",             # <--- freeze this column
+        sticky = "left",
         header = function(value) htmltools::tags$div(title = display_col, display_col),
-        cell = function(value) htmltools::tags$div(title = value, value)
+        headerStyle = list(fontSize = "12px"),
+        cell = function(value) htmltools::tags$div(title = value, value),
+        style = if (col == "Rating") {
+          function(value, index) {
+            list(background = getRatingColor(model_output_data$Rating[index]))
+          }
+        } else NULL
       ))
     }
     
@@ -328,6 +342,7 @@ updateModelTable <- function(model_stats, output, platform) {
       align = "center",
       vAlign = "center",
       header = function(value) htmltools::tags$div(title = display_col, display_col),
+      headerStyle = list(fontSize = "12px"),
       style = function(value, index) {
         bg <- if (!is.null(norm_col)) getColor(model_stats[[norm_col]][index]) else "white"
         list(background = bg)

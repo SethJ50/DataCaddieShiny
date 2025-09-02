@@ -295,6 +295,27 @@ ui <- page_navbar(
               height: 100%;
             }
             
+            /* Platform label font size */
+            label[for='model_platform'] {
+              font-size: 12px;  /* increase/decrease as needed */
+              font-weight: bold;
+              margin-bottom: 0px;
+              display: block;
+            }
+          
+            /* Platform pickerInput dropdown size */
+            #model_platform + .dropdown-toggle,
+            #model_platform + .dropdown-toggle.btn {
+              min-width: 150px;   /* adjust width */
+              max-width: 150px;
+              height: 30px;       /* adjust height */
+              line-height: 30px;
+              font-size: 14px;    /* dropdown text size */
+              background-color: #fafafa;
+              border: 1px solid #ddd;
+              border-radius: 6px;
+              margin-top: -5px;
+            }
             
           ")),
            
@@ -338,7 +359,8 @@ ui <- page_navbar(
                )
              ),
              card(
-               div(
+               div(class = "modelControls",
+                   style = "display: flex; align-items: center; gap: 10px; z-index: 10;",
                  shinyWidgets::pickerInput(
                    inputId = "model_platform",
                    label = "Platform:",
@@ -350,6 +372,18 @@ ui <- page_navbar(
                      size = 5
                    )
                  ),
+                 div(
+                   style = "margin-top: 23px;",
+                   actionButton(
+                     inputId = "generate_lineups",
+                     label = "Generate Lineups",
+                     class = "btn-primary",
+                     style = "height: 30px; padding: 4px 10px; border-radius: 4px;"
+                   )
+                 )
+               ),
+               div(
+                 style = "margin-top: -50px; z-index: 1 !important;",
                  reactableOutput("model_output")
                )
              )
