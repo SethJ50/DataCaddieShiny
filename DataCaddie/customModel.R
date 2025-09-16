@@ -14,6 +14,7 @@ library(reactable.extras)
 
 source("utils.R")
 source("playersDataFunctions.R")
+source("generatedLineups.R")
 
 modelStatsOptions <- c(
   "Display" = "real",
@@ -92,7 +93,7 @@ serverCustomModel <- function(input, output, session, favorite_players,
                               playersInTournamentPgaNames) {
   
   # Create a reactive 'dictionary' of weights for model
-  rv_weights <- reactiveValues()
+  rv_weights <- session$userData$sessionModelWeights
   
   # Render Model Stats as Input Boxes below box dropdown
   output$selectedModelStats <- renderUI({
@@ -259,6 +260,13 @@ serverCustomModel <- function(input, output, session, favorite_players,
     updateModelTable(modelTableData(), output, favorite_players, input$model_platform)
   }, ignoreInit = TRUE)
   
+  # On Generate Lineups Buttons Clicked, Open Generated Lineups Page and send data to it
+  observeEvent(input$generate_lineups, {
+    session$userData$optimizerData <- getOptimizerData(modelTableData(), output, favorite_players, input$model_platform)
+    
+    updateNavbarPage(session, "siteTabs", "Generated Lineups")
+  }, ignoreInit = TRUE)
+  
 }
 
 
@@ -270,6 +278,20 @@ serverCustomModel <- function(input, output, session, favorite_players,
 
 
 #### Supplementary Functions ---------------------------------------------------
+getOptimizerData <- function(model_stats, output, favorite_players, platform) {
+  model_stats <- as.data.frame(model_stats)
+  
+  if (platform == "FanDuel") {
+    grab_platform <- c("fdSalary")
+  } else { # DraftKings
+    grab_platform <- c("dkSalary")
+  }
+  
+  optimizer_data <- model_stats[, c("player", grab_platform, "Rating", "isFavorite"), drop = FALSE]
+  
+  return(optimizer_data)
+}
+
 updateModelTable <- function(model_stats, output, favorite_players, platform) {
   
   model_stats <- as.data.frame(model_stats)

@@ -10,6 +10,7 @@ library(ggplot2)
 library(ggrepel)
 library(plotly)
 library(showtext)
+library(shinyjs)
 
 
 theme <- bs_theme(
@@ -29,6 +30,7 @@ source("golferProfiles.R")
 source("utils.R")
 source("playersDataFunctions.R")
 source("customModel.R")
+source("generatedLineups.R")
 
 ui <- page_navbar(
   title = "DataCaddie",
@@ -400,6 +402,79 @@ ui <- page_navbar(
                )
              )
            )         
+  ),
+  
+  tags$style(HTML("
+    .nav-item a[data-value='Generated Lineups'] {
+      display: none !important;
+    }
+  ")),
+  
+  tabPanel("Generated Lineups", 
+           h4("Generated Lineups"),
+           
+           tags$style(HTML("
+            #num_lineups {
+              width: 380px !important;   /* fixed width */
+              max-width: 380px !important;
+              min-width: 380px !important;
+              padding: 3px 3px;
+              text-align: center;
+              border: 1px solid #ddd;
+              border-radius: 4px;
+              background-color: white !important;
+            }
+          ")),
+           
+           layout_columns(
+             col_widths = c(3, 9),
+             fill = TRUE,
+             card(
+               numericInput(
+                 inputId = "num_lineups",
+                 label = "Num. Lineups:",
+                 value = 10,
+                 step = 1,
+                 width = "380px"
+               ),
+               shinyWidgets::pickerInput(
+                 inputId = "locked_players",
+                 label = "Locked in Players:",
+                 choices = NULL,
+                 selected = NULL,
+                 multiple = TRUE,
+                 options = list(
+                   `actions-box` = TRUE,
+                   `live-search` = TRUE,
+                   `none-selected-text` = "No columns selected",
+                   `max-options` = 6
+                 ),
+                 width = "380px"
+               ),
+               shinyWidgets::pickerInput(
+                 inputId = "player_pool",
+                 label = "Player Pool:",
+                 choices = NULL,
+                 selected = NULL,
+                 multiple = TRUE,
+                 options = list(
+                   `actions-box` = TRUE,
+                   `live-search` = TRUE,
+                   `none-selected-text` = "No columns selected"
+                 ),
+                 width = "380px"
+               ),
+               actionButton(
+                 inputId = "generate_lineups_official",
+                 label = "Generate Lineups",
+                 class = "btn-primary",
+                 style = "height: 30px; padding: 4px 10px; border-radius: 4px;"
+               )
+             ),
+             card(
+               
+             )
+           )
   )
 )
 
@@ -410,6 +485,8 @@ server <- function(input, output, session) {
   playersInTournamentPgaNames <- nameFanduelToPga(playersInTournament)
   
   favorite_players <- reactiveValues(names = character())
+  
+  session$userData$sessionModelWeights <- reactiveValues()
   
   # On Favorite Clicked, add or remove favorite from favorite_players list
   observeEvent(input$favorite_clicked, {
@@ -436,6 +513,10 @@ server <- function(input, output, session) {
       serverCustomModel(input, output, session, favorite_players,
                            playersInTournament, playersInTournamentTourneyNameConv,
                            playersInTournamentPgaNames)
+    } else if(input$siteTabs == "Generated Lineups"){
+      serverGeneratedLineups(input, output, session, favorite_players,
+                             playersInTournament, playersInTournamentTourneyNameConv,
+                             playersInTournamentPgaNames, session$userData$optimizerData)
     } else {
       print("Invalid Server")
     }
