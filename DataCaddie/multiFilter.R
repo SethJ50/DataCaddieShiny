@@ -5,7 +5,6 @@ serverMultiFilter <- function(input, output, session, favorite_players,
                               playersInTournamentPgaNames) {
   
   rdByRd_playerData <- getRoundByRoundData(playersInTournament, data)
-  View(rdByRd_playerData)
   
   observeEvent(input$stat_view_filter, {
     if (input$stat_view_filter == "Strokes Gained") {
@@ -70,7 +69,7 @@ serverMultiFilter <- function(input, output, session, favorite_players,
     }
     
     output$multifilter_results_tbl <- renderReactable({
-      createMultifilterTable(table_data)
+      createMultifilterTable(table_data, favorite_players)
     })
     
   })
@@ -81,19 +80,9 @@ serverMultiFilter <- function(input, output, session, favorite_players,
 
 #### Supplementary Functions ===================================================
 
-createMultifilterTable <- function(table_data) {
+createMultifilterTable <- function(table_data, favorite_players) {
   
-  diff_cols <- grep("_diff$", names(table_data), value = TRUE)
-  diff_col_defs <- setNames(
-    replicate(length(diff_cols), 
-              colDef(
-                name = "", 
-                width = 45,
-                style = list(fontSize = "8px")
-              ), 
-              simplify = FALSE),
-    diff_cols
-  )
+  reversed_cols = c()
   
   base_col_defs <- list(
     player = colDef(
@@ -118,7 +107,82 @@ createMultifilterTable <- function(table_data) {
     )
   )
   
-  all_col_defs <- c(base_col_defs, diff_col_defs)
+  other_cols <- setdiff(names(table_data), names(base_col_defs))
+  
+  other_col_defs <- setNames(
+    lapply(other_cols, function(col) {
+      
+      col_min <- min(table_data[[col]], na.rm = TRUE)
+      col_max <- max(table_data[[col]], na.rm = TRUE)
+      
+      colDef(
+        name = ifelse(grepl("_diff$", col), "", col),
+        width = ifelse(grepl("_diff$", col), 45, 75),
+        style = function(value) {
+          if (is.na(value) || col_min == col_max) {
+            bg <- "white"
+          } else {
+            # Scale Value
+            val_scaled <- (value - col_min) / (col_max - col_min)
+            
+            # Reverse scale if column is in reversed_cols
+            if (col %in% reversed_cols) val_scaled <- 1 - val_scaled
+            
+            bg <- rgb(
+              colorRamp(c("#F83E3E", "white", "#4579F1"))(val_scaled),
+              maxColorValue = 255
+            )
+          }
+          list(
+            fontSize = ifelse(grepl("_diff$", col), "8px", "12px"),
+            background = bg
+          )
+        }
+      )
+    }),
+    other_cols
+  )
+  
+  favs <- favorite_players$names
+  
+  table_data <- table_data %>% 
+    mutate(
+      isFavorite = player %in% favs
+    )
+  
+  table_data$.favorite <- NA
+  
+  table_data <- table_data[, c(".favorite", setdiff(names(table_data), ".favorite"))]
+  
+  favorite_col_def <- list(
+    .favorite = colDef(
+      name = "",
+      width = 28,
+      sticky = "left",
+      sortable = FALSE,
+      resizable = FALSE,
+      cell = function(value, index) {
+        player_name <- table_data$player[index]
+        is_fav <- player_name %in% favorite_players$names
+        star <- if (is_fav) "★" else "☆"
+        
+        htmltools::div(
+          htmltools::span(
+            star,
+            style = "cursor:pointer; font-size: 18px; color: gold;",
+            onclick = sprintf(
+              "Shiny.setInputValue('favorite_clicked', '%s', {priority: 'event'})",
+              player_name
+            )
+          )
+        )
+      }
+    )
+  )
+  
+  all_col_defs <- c(base_col_defs, other_col_defs, favorite_col_def)
+  
+  all_col_defs[["isFavorite"]] <- colDef(show = FALSE)
   
   table <- reactable(
     table_data,
@@ -142,7 +206,15 @@ createMultifilterTable <- function(table_data) {
       rowStyle = list(height = "20px")
     ),
     defaultColDef = colDef(vAlign = "center", align = "center", width = 80),
-    columns = all_col_defs
+    columns = all_col_defs,
+    rowClass = JS("
+        function(rowInfo, index) {
+          if (rowInfo && rowInfo.row && rowInfo.row.isFavorite) {
+            return 'favorite-row';
+          }
+          return null;
+        }
+      ")
   )
   
   return(table)
@@ -207,7 +279,15 @@ makeStrokesGainedFilterDf <- function(input, filtered_data, full_data) {
            sgOtt, sgOtt_diff,
            sgT2G, sgT2G_diff,
            sgTot, sgTot_diff,
-           recRds, baseRds)
+           recRds, baseRds) %>% 
+    rename(
+      `SG PUTT` = sgPutt,
+      `SG ARG` = sgArg,
+      `SG APP` = sgApp,
+      `SG OTT` = sgOtt,
+      `SG T2G` = sgT2G,
+      `SG TOT` = sgTot
+    )
   
   return(final_data)
 }
@@ -259,7 +339,12 @@ makeOttFilterDf <- function(input, filtered_data, full_data) {
            drDist, drDist_diff,
            drAcc, drAcc_diff,
            sgOtt, sgOtt_diff,
-           recRds, baseRds)
+           recRds, baseRds) %>% 
+    rename(
+      `DR DIST` = drDist,
+      `DR ACC` = drAcc,
+      `SG OTT` = sgOtt
+    )
   
   return(final_data)
 }
@@ -325,10 +410,11 @@ makeTrendsFilterDf <- function(input, filtered_data, full_data) {
            sgHeat,
            recRds, baseRds) %>% 
     rename(
-      sgPutt = sgPutt_diff,
-      sgArg = sgArg_diff,
-      sgApp = sgApp_diff,
-      sgOtt = sgOtt_diff
+      `SG PUTT` = sgPutt_diff,
+      `SG ARG` = sgArg_diff,
+      `SG APP` = sgApp_diff,
+      `SG OTT` = sgOtt_diff,
+      `SG HEAT` = sgHeat
     )
   
   return(final_data)
@@ -349,12 +435,12 @@ makeFloorCeilFilterDf <- function(input, filtered_data, full_data) {
     summarise(
       fdSalary = last(fdSalary),
       dkSalary = last(dkSalary),
-      plus0 = round(mean(sgTot >= 0, na.rm = TRUE) * 100, 2),
-      plus1 = round(mean(sgTot >= 1, na.rm = TRUE) * 100, 2),
-      plus2 = round(mean(sgTot >= 2, na.rm = TRUE) * 100, 2),
-      plus3 = round(mean(sgTot >= 3, na.rm = TRUE) * 100, 2),
-      plus4 = round(mean(sgTot >= 4, na.rm = TRUE) * 100, 2),
-      plus5 = round(mean(sgTot >= 5, na.rm = TRUE) * 100, 2),
+      plus0 = round(mean(sgTot >= 0, na.rm = TRUE), 2),
+      plus1 = round(mean(sgTot >= 1, na.rm = TRUE), 2),
+      plus2 = round(mean(sgTot >= 2, na.rm = TRUE), 2),
+      plus3 = round(mean(sgTot >= 3, na.rm = TRUE), 2),
+      plus4 = round(mean(sgTot >= 4, na.rm = TRUE), 2),
+      plus5 = round(mean(sgTot >= 5, na.rm = TRUE), 2),
       baseRds = n(),
       .groups = "drop"
     )
@@ -371,12 +457,12 @@ makeFloorCeilFilterDf <- function(input, filtered_data, full_data) {
     summarise(
       fdSalary = last(fdSalary),
       dkSalary = last(dkSalary),
-      plus0 = round(mean(sgTot >= 0, na.rm = TRUE) * 100, 2),
-      plus1 = round(mean(sgTot >= 1, na.rm = TRUE) * 100, 2),
-      plus2 = round(mean(sgTot >= 2, na.rm = TRUE) * 100, 2),
-      plus3 = round(mean(sgTot >= 3, na.rm = TRUE) * 100, 2),
-      plus4 = round(mean(sgTot >= 4, na.rm = TRUE) * 100, 2),
-      plus5 = round(mean(sgTot >= 5, na.rm = TRUE) * 100, 2),
+      plus0 = round(mean(sgTot >= 0, na.rm = TRUE), 2),
+      plus1 = round(mean(sgTot >= 1, na.rm = TRUE), 2),
+      plus2 = round(mean(sgTot >= 2, na.rm = TRUE), 2),
+      plus3 = round(mean(sgTot >= 3, na.rm = TRUE), 2),
+      plus4 = round(mean(sgTot >= 4, na.rm = TRUE), 2),
+      plus5 = round(mean(sgTot >= 5, na.rm = TRUE), 2),
       recRds = n(),
       .groups = "drop"
     )
@@ -398,7 +484,15 @@ makeFloorCeilFilterDf <- function(input, filtered_data, full_data) {
            plus3, plus3_diff,
            plus4, plus4_diff,
            plus5, plus5_diff,
-           recRds, baseRds)
+           recRds, baseRds) %>% 
+    rename(
+      `SG 0+` = plus0,
+      `SG 1+` = plus1,
+      `SG 2+` = plus2,
+      `SG 3+` = plus3,
+      `SG 4+` = plus4,
+      `SG 5+` = plus5
+    )
   
   return(final_data)
 }

@@ -408,6 +408,12 @@ ui <- page_navbar(
   tabPanel("Multi-Filter", 
            h4("Multi-Filter"),
            
+           tags$head(tags$script(HTML("
+            Shiny.addCustomMessageHandler('favoriteClick', function(player) {
+              Shiny.setInputValue('favorite_clicked', player, {priority: 'event'});
+            });
+          "))),
+           
            tags$style(HTML("
             #course_diff_filter .btn {
               height: 28px;          /* smaller height */
@@ -473,6 +479,12 @@ ui <- page_navbar(
             label[for='base_rds_mf'] {
               font-size: 12px !important;
             }
+            
+            .favorite-row {
+                background-color: #FFF9C4 !important;
+                border-top: 4px solid #FFF9C4;
+                border-bottom: 4px solid #FFF9C4;
+              }
           ")),
            
            layout_columns(
