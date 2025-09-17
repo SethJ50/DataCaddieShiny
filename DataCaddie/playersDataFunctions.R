@@ -12,6 +12,13 @@ library(showtext)
 
 source("utils.R")
 
+#### Constants =================================================================
+EASY_COURSE_VAL <- -0.9
+HARD_COURSE_VAL <- 0.9
+
+EASY_FIELD_VAL <- -0.15
+HARD_FIELD_VAL <- 0.7
+
 #### Name Conversion ----------------------------------------------------------
 
 nameToFanduel <- function(name) {
@@ -298,8 +305,8 @@ getCourseDifficultyData <- function(playersInTournament, data, N) {
   # Add column indicating difficulty by string
   finalData <- finalData %>% 
     mutate(courseDiff = case_when(
-      difficulty <= -0.9 ~ "easy",
-      difficulty >= 0.9 ~ "hard",
+      difficulty <= EASY_COURSE_VAL ~ "easy",
+      difficulty >= HARD_COURSE_VAL ~ "hard",
       TRUE ~ "medium"
     ))
   
@@ -363,8 +370,8 @@ getFieldStrengthData <- function(playersInTournament, data, N) {
   # Mark Easy, Medium, and Hard field strenghts
   finalData <- finalData %>% 
     mutate(fieldType = case_when(
-      strength < -0.15 ~ "easy",
-      strength > 0.7 ~ "hard",
+      strength < EASY_FIELD_VAL ~ "easy",
+      strength > HARD_FIELD_VAL ~ "hard",
       TRUE ~ "medium"
     ))
   
@@ -405,6 +412,57 @@ getFieldStrengthData <- function(playersInTournament, data, N) {
     )
   
   return(summaryData)
+}
+
+getRoundByRoundData <- function(playersInTournament, data) {
+  playersInTournamentTourneyNameConv <- nameFanduelToTournament(playersInTournament)
+  
+  sgRows <- data %>% 
+    filter(player %in% playersInTournamentTourneyNameConv, Round != "Event") %>% 
+    mutate(Date = as.Date(dates, format = "%m/%d/%y"),
+           tournamentyear = paste(tournament, format(Date, "%Y"))) %>% 
+    arrange(player, desc(Date))
+  
+  # Grab difficulty by course data
+  courseDiffData <- courseStatsData
+  
+  # Grab field strength data
+  fieldStrengthData <- fieldStrengthData %>% 
+    mutate(tournamentyear = paste(tournament, year))
+  
+  # Get FanDuel and DraftKings Salary Data
+  salaryData <- salaries %>% 
+    filter(player %in% playersInTournament) %>% 
+    select(player, fdSalary, dkSalary)
+  
+  finalData <- sgRows %>% 
+    left_join(
+      fieldStrengthData %>% select(tournamentyear, strength),
+      by = "tournamentyear"
+    ) %>% 
+    left_join(
+      courseDiffData %>% select(course, difficulty),
+      by = "course"
+    ) %>%
+    mutate(fanduelName = nameToFanduel(player)) %>%
+    left_join(salaryData, by = c("fanduelName" = "player"))
+    
+  
+  finalData <- finalData %>% 
+    mutate(
+      courseDiff = case_when(
+        difficulty <= EASY_COURSE_VAL ~ "easy",
+        difficulty >= HARD_COURSE_VAL ~ "hard",
+        TRUE ~ "medium"
+      ),
+      fieldType = case_when(
+        strength < EASY_FIELD_VAL ~ "easy",
+        strength > HARD_FIELD_VAL ~ "hard",
+        TRUE ~ "medium"
+      )
+    )
+  
+  return(finalData)
 }
 
 getCourseHistoryDf <- function(playersInTournament, data) {

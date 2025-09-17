@@ -31,6 +31,7 @@ source("utils.R")
 source("playersDataFunctions.R")
 source("customModel.R")
 source("generatedLineups.R")
+source("multiFilter.R")
 
 ui <- page_navbar(
   title = "DataCaddie",
@@ -404,15 +405,139 @@ ui <- page_navbar(
            )         
   ),
   
+  tabPanel("Multi-Filter", 
+           h4("Multi-Filter"),
+           
+           tags$style(HTML("
+            #course_diff_filter .btn {
+              height: 28px;          /* smaller height */
+              line-height: 20px;     /* vertically center text */
+              font-size: 13px;       /* slightly smaller text */
+              padding: 2px 10px;     /* tighter padding */
+            }
+            
+            #field_strength_filter .btn {
+              height: 28px;          /* smaller height */
+              line-height: 20px;     /* vertically center text */
+              font-size: 13px;       /* slightly smaller text */
+              padding: 2px 10px;     /* tighter padding */
+            }
+            
+            label[for='stat_view_filter'] {
+              font-size: 15px;  /* increase/decrease as needed */
+              font-weight: bold;
+              margin-bottom: 0px;
+              display: block;
+            }
+          
+            #stat_view_filter + .dropdown-toggle,
+            #stat_view_filter + .dropdown-toggle.btn {
+              min-width: 370px;   /* adjust width */
+              max-width: 370px;
+              height: 30px;       /* adjust height */
+              line-height: 30px;
+              font-size: 14px;    /* dropdown text size */
+              background-color: #fafafa;
+              border: 1px solid #ddd;
+              border-radius: 6px;
+              margin-top: -5px;
+            }
+            
+            #rec_rds_mf {
+              width: 150px !important;   /* fixed width */
+              max-width: 150px !important;
+              min-width: 150px !important;
+              padding: 3px 3px;
+              border: 1px solid #ddd;
+              border-radius: 4px;
+              text-align: center;
+              background-color: white !important;
+              margin-top: -4px;
+            }
+            
+            #base_rds_mf {
+              width: 150px !important;   /* fixed width */
+              max-width: 150px !important;
+              min-width: 150px !important;
+              padding: 3px 3px;
+              border: 1px solid #ddd;
+              border-radius: 4px;
+              text-align: center;
+              background-color: white !important;
+              margin-top: -4px;
+            }
+            
+            label[for='rec_rds_mf'] {
+              font-size: 12px !important;
+            }
+            label[for='base_rds_mf'] {
+              font-size: 12px !important;
+            }
+          ")),
+           
+           layout_columns(
+             col_widths = c(3, 9),
+             fill = TRUE,
+             card(
+               radioGroupButtons(
+                 inputId = "course_diff_filter",
+                 label = "Course Difficulty:",
+                 choices = c("All", "Easy", "Medium", "Hard"),
+                 justified = TRUE
+               ),
+               radioGroupButtons(
+                 inputId = "field_strength_filter",
+                 label = "Field Strength:",
+                 choices = c("All", "Weak", "Medium", "Strong"),
+                 justified = TRUE
+               ),
+               shinyWidgets::pickerInput(
+                 inputId = "stat_view_filter",
+                 label = "Stat View:",
+                 choices = c("Strokes Gained", "Off-the-Tee", "Trends", "Floor/Ceiling"),
+                 selected = "Strokes Gained",
+                 width = "370px",
+                 options = list(
+                   style = "btn-light",   # button style
+                   size = 5
+                 )
+               )
+             ),
+             card(
+               div(id = "multifilter_round_inputs",
+                   style = "display: flex; align-items: center; gap: 10px; z-index: 10; width: fit-content;",
+                   numericInput(
+                     inputId = "rec_rds_mf",
+                     label = "# Rec. Rds:",
+                     value = 50,
+                     step = 1,
+                     width = "150px"
+                   ),
+                   numericInput(
+                     inputId = "base_rds_mf",
+                     label = "# Base Rds:",
+                     value = 200,
+                     step = 1,
+                     width = "150px"
+                   )
+               ),
+               div(
+                 style = "margin-top: -45px;",
+                 reactableOutput("multifilter_results_tbl")
+               )
+             )
+           )
+  ),
+  
   tags$style(HTML("
     .nav-item a[data-value='Generated Lineups'] {
       display: none !important;
+      width: 0px !important;
     }
   ")),
   
-  tabPanel("Generated Lineups", 
+  tabPanel("Generated Lineups",
            h4("Generated Lineups"),
-           
            tags$style(HTML("
             #num_lineups {
               width: 380px !important;   /* fixed width */
@@ -477,6 +602,7 @@ ui <- page_navbar(
              )
            )
   )
+  
 )
 
 server <- function(input, output, session) {
@@ -518,6 +644,10 @@ server <- function(input, output, session) {
       serverGeneratedLineups(input, output, session, favorite_players,
                              playersInTournament, playersInTournamentTourneyNameConv,
                              playersInTournamentPgaNames, session$userData$optimizerData)
+    } else if(input$siteTabs == "Multi-Filter"){
+      serverMultiFilter(input, output, session, favorite_players,
+                        playersInTournament, playersInTournamentTourneyNameConv,
+                        playersInTournamentPgaNames)
     } else {
       print("Invalid Server")
     }
