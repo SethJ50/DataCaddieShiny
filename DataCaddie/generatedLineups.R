@@ -27,11 +27,22 @@ serverGeneratedLineups <- function(input, output, session, favorite_players,
   
   # Observe Generate Optimal Lineups Button Click - Generate Lineups
   observeEvent(input$generate_lineups_official, {
+    # Get optimal lineups
     optimalLineupsDf <- generateOptimalLineups(optimizerData, input$num_lineups, input$locked_players, input$player_pool)
-    View(optimalLineupsDf)
     
+    # Get Ownership Dataframe
     ownershipDf <- makeOwnershipDf(optimalLineupsDf)
-    View(ownershipDf)
+
+    # Populate Lineups Table
+    output$optimizer_results_tbl <- renderReactable({
+      makeLineupsTable(optimalLineupsDf)
+    })
+    
+    # Populate Ownership Table
+    output$optimizer_ownership_tbl <- renderReactable({
+      makeOwnershipTable(ownershipDf)
+    })
+    
   })
   
 }
@@ -40,6 +51,108 @@ serverGeneratedLineups <- function(input, output, session, favorite_players,
 
 
 # Supplementary Functions ------------------------------------------------------
+makeLineupsTable <- function(optimalLineupsDf) {
+  optimalLineupsDf <- optimalLineupsDf %>% 
+    select(-lineup_id)
+  
+  table <- reactable(
+    optimalLineupsDf,
+    searchable = FALSE,
+    resizable = TRUE,
+    pagination = FALSE,
+    showPageInfo = FALSE,
+    onClick = NULL,
+    outlined = TRUE,
+    bordered = TRUE,
+    striped = TRUE,
+    highlight = TRUE,
+    compact = TRUE,
+    fullWidth = TRUE,
+    wrap = FALSE,
+    defaultSortOrder = "desc",
+    defaultSorted = "total_rating",
+    showSortIcon = FALSE,
+    theme = reactableTheme(
+      style = list(fontSize = "12px"),
+      rowStyle = list(height = "20px")
+    ),
+    defaultColDef = colDef(vAlign = "center", align = "center", width = 100),
+    columns = list(
+      player1 = colDef(
+        name = "Player 1",
+        width = 160
+      ),
+      player2 = colDef(
+        name = "Player 2",
+        width = 160
+      ),
+      player3 = colDef(
+        name = "Player 3",
+        width = 160
+      ),
+      player4 = colDef(
+        name = "Player 4",
+        width = 160
+      ),
+      player5 = colDef(
+        name = "Player 5",
+        width = 160
+      ),
+      player6 = colDef(
+        name = "Player 6",
+        width = 160
+      ),
+      total_salary = colDef(
+        name = "Salary",
+        width = 75
+      ),
+      total_rating = colDef(
+        name = "Rating",
+        width = 75
+      )
+    )
+  )
+  
+  return(table)
+}
+
+makeOwnershipTable <- function(ownershipDf) {
+  
+  table <- reactable(
+    ownershipDf,
+    searchable = FALSE,
+    resizable = TRUE,
+    pagination = FALSE,
+    showPageInfo = FALSE,
+    onClick = NULL,
+    outlined = TRUE,
+    bordered = TRUE,
+    striped = TRUE,
+    highlight = TRUE,
+    compact = TRUE,
+    fullWidth = TRUE,
+    wrap = FALSE,
+    defaultSortOrder = "desc",
+    defaultSorted = "Ownership",
+    showSortIcon = FALSE,
+    theme = reactableTheme(
+      style = list(fontSize = "15px"),
+      rowStyle = list(height = "25px")
+    ),
+    defaultColDef = colDef(vAlign = "center", align = "center", width = 100),
+    columns = list(
+      Player = colDef(
+        width = 260
+      ),
+      Ownership = colDef(
+        width = 100
+      )
+    )
+  )
+  
+  return(table)
+}
+
 generateOptimalLineups <- function(optimizerData, num_lineups, locked_players, player_pool, verbose = FALSE) {
   
   # Setup for Fantasy Platform

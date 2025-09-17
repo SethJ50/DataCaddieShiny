@@ -469,10 +469,11 @@ ui <- page_navbar(
                  label = "Generate Lineups",
                  class = "btn-primary",
                  style = "height: 30px; padding: 4px 10px; border-radius: 4px;"
-               )
+               ),
+               reactableOutput("optimizer_ownership_tbl")
              ),
              card(
-               
+               reactableOutput("optimizer_results_tbl")
              )
            )
   )
