@@ -648,7 +648,7 @@ server <- function(input, output, session) {
     } else if(input$siteTabs == "Golfer Profiles") {
       serverGolferProfiles(input, output, session, favorite_players,
                            playersInTournament, playersInTournamentTourneyNameConv,
-                           playersInTournamentPgaNames)
+                           playersInTournamentPgaNames, all_player_data)
     } else if(input$siteTabs == "Custom Model"){
       serverCustomModel(input, output, session, favorite_players,
                            playersInTournament, playersInTournamentTourneyNameConv,

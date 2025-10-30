@@ -1,13 +1,20 @@
 library(mongolite)
 
 get_mongo_collection <- function(collection_name, db_name = "data_caddy") {
-  docker_env_path <- "/srv/shiny-server/.Renviron"
-  if (file.exists(docker_env_path)) {
-    readRenviron(docker_env_path)
+  if(file.exists(".Renviron")) {
+    readRenviron(".Renviron")
   }
   
-  db_url <- Sys.getenv("MONGO_URL")
-  print(db_url)
+  username <- "admin"
+  password <- Sys.getenv("ADMIN_PWD")
+  host <- "localhost"
+  port <- 27017
+  auth_db <- "admin"
+  
+  db_url <- sprintf(
+    "mongodb://%s:%s@%s:%s/%s?authSource=%s",
+    username, password, host, port, db_name, auth_db
+  )
   
   conn <- mongo(
     collection = collection_name,

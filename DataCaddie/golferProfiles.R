@@ -15,7 +15,7 @@ source("playersDataFunctions.R")
 
 serverGolferProfiles <- function(input, output, session, favorite_players,
                                  playersInTournament, playersInTournamentTourneyNameConv,
-                                 playersInTournamentPgaNames) {
+                                 playersInTournamentPgaNames, all_player_data) {
   
   # Golfer Profiles Player Picker and Star
   output$gp_picker_with_star <- renderUI({
