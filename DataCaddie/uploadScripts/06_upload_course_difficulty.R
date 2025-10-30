@@ -1,0 +1,47 @@
+library(readxl)
+library(dplyr)
+source("uploadUtils/db_connection.R")
+
+# File Name -> Pretty Name
+name_conversion <- c(
+  'ACCORDIA GOLF Narashino Country Club' = 'Accordia Golf Narashino Country Club',
+  'Hamilton Golf &amp; Country Club' = 'Hamilton Golf and Country Club',
+  'PGA National Resort (The Champion)' = 'PGA National Resort',
+  'Pinehurst Resort &amp; Country Club (Course No. 2)' = 'Pinehurst Resort and Country Club',
+  'TPC San Antonio (Oaks Course)' = 'TPC San Antonio',
+  'TPC Sawgrass (THE PLAYERS Stadium Course)' = 'TPC Sawgrass',
+  'TPC Scottsdale (Stadium Course)' = 'TPC Scottsdale',
+  "Arnold Palmer's Bay Hill Club &amp; Lodge" = "Arnold Palmer's Bay Hill Club & Lodge",
+  'PGA National Resort (The Champion - Par 71)' = 'PGA National Resort (The Champion Course)'
+)
+
+upload_course_difficulty <- function(){
+  df <- read_excel("data/course_difficulty/dg_course_table.xlsx")
+  
+  column_map <- c(
+    "course" = "course",
+    "adj_score_to_par" = "difficulty"
+  )
+  
+  missing_cols <- setdiff(names(column_map), names(df))
+  if(length(missing_cols) > 0) {
+    stop("Missing required columns in course difficulty file:\n", paste(missing_cols, collapse = ", "))
+  }
+  
+  df <- df %>% rename(
+    course = course,
+    difficulty = adj_score_to_par
+  )
+  
+  df$course <- ifelse(df$course %in% names(name_conversion),
+                      name_conversion[df$course],
+                      df$course)
+  
+  df <- df %>% select(course, difficulty)
+  
+  col <- get_mongo_collection("coursedifficulties")
+  col$remove('{}')
+  col$insert(df)
+  
+  cat(paste0("✅ Course difficulty uploaded successfully (", nrow(df), " rows)\n"))
+}

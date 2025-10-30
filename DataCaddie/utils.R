@@ -10,55 +10,20 @@ library(ggrepel)
 library(plotly)
 library(showtext)
 
-font_add("Almari", "www/Almarai-Regular.TTF")
-font_add("Almari-Bold", "www/Almarai-Bold.TTF")
+if (file.exists("www/Almarai-Regular.ttf")) {
+  # Local development
+  regular_path <- "www/Almarai-Regular.ttf"
+  bold_path <- "www/Almarai-Bold.ttf"
+} else {
+  # Docker container
+  print("HELLOOOOOO")
+  regular_path <- "/srv/shiny-server/www/Almarai-Regular.ttf"
+  bold_path <- "/srv/shiny-server/www/Almarai-Bold.ttf"
+}
+
+font_add("Almari", regular_path)
+font_add("Almari-Bold", bold_path)
 showtext_auto()
-
-#### DB Connection and Data
-
-# Connect to local MongoDB
-#db_url = "mongodb://localhost"
-
-## Connect to Digital Ocean MongoDB
-# ssh into droplet using the following: ssh -L 27017:localhost:27017 root@64.23.155.37
-db_url = "mongodb://localhost:27017"
-
-mongo_connection <- mongo(collection = "tournamentrows",
-                          db = "data_caddy",
-                          url = db_url)
-
-data <- mongo_connection$find('{}')
-
-mongo_fd_conn <- mongo(collection = "salaries",
-                       db = "data_caddy",
-                       url = db_url)
-
-salaries <- mongo_fd_conn$find('{}')
-
-mongo_pga_conn <- mongo(collection = "pgatours",
-                        db = "data_caddy",
-                        url = db_url)
-
-pgaData <- mongo_pga_conn$find('{}')
-
-mongo_ch_conn <- mongo(collection = "coursehistories",
-                       db = "data_caddy",
-                       url = db_url)
-
-courseHistoryData <- mongo_ch_conn$find('{}')
-
-mongo_coursestats_conn <- mongo(collection = "coursedifficulties",
-                                db = "data_caddy",
-                                url = db_url)
-
-courseStatsData <- mongo_coursestats_conn$find('{}')
-
-mongo_fieldstrength_conn <- mongo(collection = "fieldstrengths",
-                                db = "data_caddy",
-                                url = db_url)
-
-fieldStrengthData <- mongo_fieldstrength_conn$find('{}')
-
 
 #### Helper Functions
 

@@ -12,6 +12,7 @@ library(plotly)
 library(showtext)
 library(shinyjs)
 
+source("global.R")
 
 theme <- bs_theme(
   version = 5,
