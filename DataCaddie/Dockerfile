@@ -1,3 +1,4 @@
+# Base image
 FROM rocker/shiny:4.3.2
 
 # Install system dependencies for R packages
@@ -17,17 +18,16 @@ RUN apt-get update && apt-get install -y \
 RUN R -e "install.packages(c( \
   'shiny', 'bslib', 'reactable', 'reactable.extras', 'mongolite', \
   'tidyverse', 'shinyWidgets', 'htmltools', 'ggplot2', 'ggrepel', \
-  'plotly', 'showtext', 'readxl', 'dplyr', 'shinyjs', 'ompr', 'ompr.roi', 'ROI.plugin.glpk'))"
+  'plotly', 'showtext', 'readxl', 'dplyr', 'shinyjs', 'ompr', 'ompr.roi', 'ROI.plugin.glpk'), repos='https://cloud.r-project.org/')"
 
-# Copy the app code into the image
-COPY . /srv/shiny-server/
+# Set working directory
+WORKDIR /home/app
 
-# Copy .Renviron for DB credentials
-#COPY .Renviron /srv/shiny-server/.Renviron
+# Copy your app code into the image
+COPY . /home/app
 
-# Expose Shiny default port
-EXPOSE 3838
+# Expose Hugging Face Spaces port
+EXPOSE 7860
 
-# Run the Shiny app server
-CMD ["/usr/bin/shiny-server"]
-
+# Run the Shiny app on 0.0.0.0 and port 7860
+CMD ["R", "-e", "shiny::runApp('/home/app', host='0.0.0.0', port=7860)"]
