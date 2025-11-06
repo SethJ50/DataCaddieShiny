@@ -21,7 +21,9 @@ serverGolferProfiles <- function(input, output, session, favorite_players,
   output$gp_picker_with_star <- renderUI({
     
     # Set Dropdown to unique Tournament Player Names
-    players <- unique(salaries$player)
+    player_data_sorted <- salaries %>% 
+      arrange(-fdSalary)
+    players <- unique(player_data_sorted$player)
     players_tourney_names <- vapply(players, nameFanduelToTournament, character(1))
     
     # Set first player as default selected
