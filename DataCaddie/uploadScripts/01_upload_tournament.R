@@ -50,5 +50,3 @@ upload_tournament <- function(file_path) {
   col$insert(df)
   cat(paste0("✅ TournamentRow uploaded successfully (", nrow(df), " rows)\n"))
 }
-
-upload_tournament("data/tournament/TOUR Championship_2025.xlsx")
