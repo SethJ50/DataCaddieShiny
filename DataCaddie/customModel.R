@@ -15,9 +15,9 @@ library(reactable.extras)
 source("utils.R")
 source("playersDataFunctions.R")
 source("generatedLineups.R")
+source("basics.R")
 
 modelStatsOptions <- c(
-  "Display" = "real",
   "SG: PUTT PGA" = "SG Putt PGA",
   "SG: ARG PGA" = "SG Arg PGA",
   "SG: APP PGA" = "SG App PGA",
@@ -330,48 +330,11 @@ updateModelTable <- function(model_stats, output, favorite_players, platform) {
   
   display_names <- setNames(names(modelStatsOptions), modelStatsOptions)
   
-  # Coloring function for stat cells
-  getColor <- function(value) {
-    if (is.na(value)) return("white")
-    value_clipped <- pmax(pmin(value, 3), -3)
-    val_scaled <- (value_clipped + 3) / 6
-    rgb(colorRamp(c("#F83E3E", "white", "#4579F1"))(val_scaled), maxColorValue = 255)
-  }
-  
-  # Coloring function for Rating cells
-  getRatingColor <- function(value) {
-    if (is.na(value)) return("white")
-    val_scaled <- pmax(pmin(value, 100), 0) / 100
-    rgb(colorRamp(c("#F83E3E", "white", "#4579F1"))(val_scaled), maxColorValue = 255)
-  }
+  # Make Cell Coloring Functions
+  getColor <- makeColorFunc(min_val = -3, max_val = 3)
+  getRatingColor <- makeColorFunc(min_val = 0, max_val = 100)
   
   model_output_data <- model_output_data[, c(".favorite", setdiff(names(model_output_data), ".favorite"))]
-  
-  favorite_col_def <- list(
-    .favorite = colDef(
-      name = "",
-      width = 28,
-      sticky = "left",
-      sortable = FALSE,
-      resizable = FALSE,
-      cell = function(value, index) {
-        player_name <- model_output_data$Player[index]
-        is_fav <- player_name %in% favorite_players$names
-        star <- if (is_fav) "★" else "☆"
-        
-        htmltools::div(
-          htmltools::span(
-            star,
-            style = "cursor:pointer; font-size: 18px; color: gold;",
-            onclick = sprintf(
-              "Shiny.setInputValue('favorite_clicked', '%s', {priority: 'event'})",
-              player_name
-            )
-          )
-        )
-      }
-    )
-  )
   
   col_defs <- lapply(names(model_output_data), function(col) {
     
@@ -384,78 +347,28 @@ updateModelTable <- function(model_stats, output, favorite_players, platform) {
                           "Rating" = 80,
                           100)
       
-      return(colDef(
-        width = width_val,
-        align = "center",
-        vAlign = "center",
-        sticky = "left",
-        header = function(value) htmltools::tags$div(title = display_col, display_col),
-        headerStyle = list(fontSize = "12px"),
-        cell = function(value) htmltools::tags$div(title = value, value),
-        style = if (col == "Rating") {
-          function(value, index) {
-            list(background = getRatingColor(model_output_data$Rating[index]))
-          }
-        } else NULL
-      ))
-    }
-    
-    # Other stat columns: color by _norm
-    norm_col <- paste0(col, "_norm")
-    if (!(norm_col %in% names(model_stats))) norm_col <- NULL
-    
-    colDef(
-      align = "center",
-      vAlign = "center",
-      header = function(value) htmltools::tags$div(title = display_col, display_col),
-      headerStyle = list(fontSize = "12px"),
-      style = function(value, index) {
-        bg <- if (!is.null(norm_col)) getColor(model_stats[[norm_col]][index]) else "white"
-        list(background = bg)
+      color_func <- if (col == "Rating") getRatingColor else NULL
+      
+      makeColDef(col, display_name = display_col, width = width_val,
+                 sticky = "left", color_func = color_func, norm_data = NULL)
+    } else {
+      # Other stat columns: color by _norm
+      norm_col <- paste0(col, "_norm")
+      norm_data <- if (norm_col %in% names(model_stats)) {
+        model_stats[[norm_col]]
+      } else {
+        rep(NA_real_, nrow(model_output_data))
       }
-    )
-    
+      
+      makeColDef(col, display_name = display_col, width = 100,
+                 color_func = getColor, norm_data = norm_data)
+    }
   })
   
   names(col_defs) <- names(model_output_data)
   
-  col_defs <- c(favorite_col_def, col_defs)
-  
-  col_defs[["isFavorite"]] <- colDef(show = FALSE)
-  
   output$model_output <- renderReactable({
-    reactable(
-      model_output_data,
-      searchable = TRUE,
-      resizable = TRUE,
-      pagination = FALSE,
-      showPageInfo = FALSE,
-      onClick = NULL,
-      outlined = TRUE,
-      bordered = TRUE,
-      striped = TRUE,
-      highlight = TRUE,
-      compact = TRUE,
-      fullWidth = TRUE,
-      wrap = FALSE,
-      defaultSortOrder = "desc",
-      defaultSorted = "Rating",
-      showSortIcon = FALSE,
-      theme = reactableTheme(
-        style = list(fontSize = "15px"),
-        rowStyle = list(height = "25px")
-      ),
-      defaultColDef = colDef(vAlign = "center", align = "center", width = 100),
-      columns = col_defs,
-      rowClass = JS("
-        function(rowInfo, index) {
-          if (rowInfo && rowInfo.row && rowInfo.row.isFavorite) {
-            return 'favorite-row';
-          }
-          return null;
-        }
-      ")
-    )
+    makeBasicTable(model_output_data, col_defs, "Rating", favorite_players, hasFavorites = TRUE)
   })
 }
 

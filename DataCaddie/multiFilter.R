@@ -81,30 +81,12 @@ serverMultiFilter <- function(input, output, session, favorite_players,
 #### Supplementary Functions ===================================================
 
 createMultifilterTable <- function(table_data, favorite_players) {
-  
-  reversed_cols = c()
-  
   base_col_defs <- list(
-    player = colDef(
-      name = "Player",
-      width = 160
-    ),
-    fdSalary = colDef(
-      name = "FD Salary",
-      width = 80
-    ),
-    dkSalary = colDef(
-      name = "DK Salary",
-      width = 80
-    ),
-    recRds = colDef(
-      name = "RecRds",
-      width = 70
-    ),
-    baseRds = colDef(
-      name = "BaseRds",
-      width = 70
-    )
+    Player = colDef(name = "Player", width = 160 ),
+    fdSalary = colDef( name = "FD Salary", width = 80),
+    dkSalary = colDef(name = "DK Salary", width = 80),
+    recRds = colDef(name = "RecRds", width = 70),
+    baseRds = colDef(name = "BaseRds", width = 70)
   )
   
   other_cols <- setdiff(names(table_data), names(base_col_defs))
@@ -115,30 +97,12 @@ createMultifilterTable <- function(table_data, favorite_players) {
       col_min <- min(table_data[[col]], na.rm = TRUE)
       col_max <- max(table_data[[col]], na.rm = TRUE)
       
-      colDef(
-        name = ifelse(grepl("_diff$", col), "", col),
-        width = ifelse(grepl("_diff$", col), 45, 75),
-        style = function(value) {
-          if (is.na(value) || col_min == col_max) {
-            bg <- "white"
-          } else {
-            # Scale Value
-            val_scaled <- (value - col_min) / (col_max - col_min)
-            
-            # Reverse scale if column is in reversed_cols
-            if (col %in% reversed_cols) val_scaled <- 1 - val_scaled
-            
-            bg <- rgb(
-              colorRamp(c("#F83E3E", "white", "#4579F1"))(val_scaled),
-              maxColorValue = 255
-            )
-          }
-          list(
-            fontSize = ifelse(grepl("_diff$", col), "8px", "12px"),
-            background = bg
-          )
-        }
-      )
+      name <- ifelse(grepl("_diff$", col), "", col)
+      width <- ifelse(grepl("_diff$", col), 45, 75)
+      color_func <- makeColorFunc(min_val = col_min, max_val = col_max)
+      font_size <- ifelse(grepl("_diff$", col), "8px", "12px")
+      
+      makeColDef(col, name, width = width, color_func = color_func, font_size = font_size)
     }),
     other_cols
   )
@@ -154,68 +118,13 @@ createMultifilterTable <- function(table_data, favorite_players) {
   
   table_data <- table_data[, c(".favorite", setdiff(names(table_data), ".favorite"))]
   
-  favorite_col_def <- list(
-    .favorite = colDef(
-      name = "",
-      width = 28,
-      sticky = "left",
-      sortable = FALSE,
-      resizable = FALSE,
-      cell = function(value, index) {
-        player_name <- table_data$player[index]
-        is_fav <- player_name %in% favorite_players$names
-        star <- if (is_fav) "★" else "☆"
-        
-        htmltools::div(
-          htmltools::span(
-            star,
-            style = "cursor:pointer; font-size: 18px; color: gold;",
-            onclick = sprintf(
-              "Shiny.setInputValue('favorite_clicked', '%s', {priority: 'event'})",
-              player_name
-            )
-          )
-        )
-      }
-    )
-  )
+  table_data <- table_data %>% rename(Player = player)
   
-  all_col_defs <- c(base_col_defs, other_col_defs, favorite_col_def)
+  all_col_defs <- c(base_col_defs, other_col_defs)
   
-  all_col_defs[["isFavorite"]] <- colDef(show = FALSE)
+  table <- makeBasicTable(table_data, all_col_defs, "fdSalary", favorite_players,
+                 hasFavorites = TRUE, font_size = 12, row_height = 20)
   
-  table <- reactable(
-    table_data,
-    searchable = TRUE,
-    resizable = TRUE,
-    pagination = FALSE,
-    showPageInfo = FALSE,
-    onClick = NULL,
-    outlined = TRUE,
-    bordered = TRUE,
-    striped = TRUE,
-    highlight = TRUE,
-    compact = TRUE,
-    fullWidth = TRUE,
-    wrap = FALSE,
-    defaultSortOrder = "desc",
-    defaultSorted = "fdSalary",
-    showSortIcon = FALSE,
-    theme = reactableTheme(
-      style = list(fontSize = "12px"),
-      rowStyle = list(height = "20px")
-    ),
-    defaultColDef = colDef(vAlign = "center", align = "center", width = 80),
-    columns = all_col_defs,
-    rowClass = JS("
-        function(rowInfo, index) {
-          if (rowInfo && rowInfo.row && rowInfo.row.isFavorite) {
-            return 'favorite-row';
-          }
-          return null;
-        }
-      ")
-  )
   
   return(table)
 }

@@ -395,7 +395,7 @@ ui <- tagList(
                ),
                card(
                  div(class = "modelControls",
-                     style = "display: flex; align-items: center; gap: 10px; z-index: 10;",
+                     style = "display: flex; align-items: center; gap: 10px; z-index: 10; width: 200px;",
                    shinyWidgets::pickerInput(
                      inputId = "model_platform",
                      label = "Platform:",
