@@ -30,6 +30,7 @@ source("cheatSheet.R")
 source("golferProfiles.R")
 source("utils.R")
 source("playersDataFunctions.R")
+source("courseOverview.R")
 source("customModel.R")
 source("generatedLineups.R")
 source("multiFilter.R")
@@ -268,6 +269,63 @@ ui <- tagList(
                    style = "",
                    reactableOutput("gp_recent_rounds")
                  )
+               )
+             )
+             
+    ),
+    tabPanel("Course Overview", 
+             
+             tags$head(tags$script(HTML("
+              Shiny.addCustomMessageHandler('favoriteClick', function(player) {
+                Shiny.setInputValue('favorite_clicked', player, {priority: 'event'});
+              });
+            "))),
+             
+             tags$style(HTML("
+                #co_course + .dropdown-toggle {
+                  font-size: 20px !important;
+                  height: 50px !important;
+                  padding: 12px 12px !important;
+              
+                  display: flex !important;
+                  align-items: center !important;
+                  justify-content: center !important;
+                  text-align: center !important;
+                }
+              
+                #co_course {
+                  font-size: 18px !important;
+                  margin: auto;
+                  text-align: center;
+                }
+            ")),
+             
+             layout_columns(
+               col_widths = c(3, 3, 6),
+               fill = TRUE,
+               card(
+                 style = "width: 100%;",
+                 div(
+                   style = "width: 100%; margin-left: auto; margin-right: auto;",
+                   shinyWidgets::pickerInput(
+                     inputId = "co_course",
+                     label = NULL,
+                     choices = unique(courseStatsData$course),
+                     selected = unique(courseStatsData$course)[1],
+                     options = list(`live-search` = TRUE),
+                     width = "100%"
+                   ),
+                   div(
+                     style = "margin-top: 10px; overflow-x: hidden;",
+                     reactableOutput("coStatsTable", width = "100%")
+                   )
+                 )
+               ),
+               card(
+                 uiOutput("courseStats")
+               ),
+               card(
+                 
                )
              )
              
@@ -690,6 +748,10 @@ server <- function(input, output, session) {
       serverGolferProfiles(input, output, session, favorite_players,
                            playersInTournament, playersInTournamentTourneyNameConv,
                            playersInTournamentPgaNames, all_player_data)
+    } else if(input$siteTabs == "Course Overview"){
+      serverCourseOverview(input, output, session, favorite_players,
+                        playersInTournament, playersInTournamentTourneyNameConv,
+                        playersInTournamentPgaNames)
     } else if(input$siteTabs == "Custom Model"){
       serverCustomModel(input, output, session, favorite_players,
                            playersInTournament, playersInTournamentTourneyNameConv,

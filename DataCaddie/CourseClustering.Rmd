@@ -1,0 +1,191 @@
+---
+title: "CourseClustering"
+output: pdf_document
+date: "2025-12-21"
+---
+### Load Libraries
+```{r}
+library(dplyr)
+library(ggplot2)
+library(factoextra)
+```
+
+### Load Data from DB
+```{r}
+source("uploadUtils/db_connection.R")
+course_diff_conn <- get_mongo_collection("coursedifficulties")
+data <- course_diff_conn$find('{}') %>% 
+  filter(year == "all")
+```
+
+### Cluster Data
+```{r}
+cluster_cols <- c('par', 'yardage', 'difficulty',     'adj_driving_distance', 'adj_driving_accuracy', 'fw_width',
+'fw_diff', 'adj_penalties')
+non_cluster <- c('course', 'year')
+
+#cluster_data <- data %>% select(cluster_cols)
+cluster_data <- data %>% select(-all_of(non_cluster)) %>% 
+  mutate(across(everything(), ~ tidyr::replace_na(.x, 0)))
+
+course_info <- data %>% 
+  select(course, year)
+```
+
+### Elbow Method
+```{r}
+scaled_data <- scale(cluster_data)
+
+set.seed(123)
+
+fviz_nbclust(
+  scaled_data,
+  kmeans,
+  method = "wss"
+) +
+  geom_vline(xintercept = 5, linetype = 2) +
+  labs(title = "Elbow Method for K Selection")
+```
+
+### Run K-Means
+```{r}
+set.seed(123)
+
+k <- 6
+kmeans_model <- kmeans(
+  scaled_data,
+  centers = k,
+  nstart = 25
+)
+
+cluster_data$cluster <- factor(kmeans_model$cluster)
+```
+
+### PCA Visualization
+```{r}
+pca <- prcomp(scaled_data, center = TRUE, scale. = TRUE)
+
+pca_df <- data.frame(
+  PC1 = pca$x[, 1],
+  PC2 = pca$x[, 2],
+  cluster = cluster_data$cluster
+)
+
+ggplot(pca_df, aes(PC1, PC2, color = cluster)) +
+  geom_point(size = 2, alpha = 0.8) +
+  labs(
+    title = "K-means Clusters (PCA Projection)",
+    x = "PC1",
+    y = "PC2"
+  ) +
+  theme_minimal()
+```
+
+### Interpret Clusters
+```{r}
+cluster_summaries <- cluster_data %>%
+  group_by(cluster) %>%
+  summarise(across(where(is.numeric), mean, na.rm = TRUE), n = n())
+
+View(cluster_summaries)
+
+```
+
+```{r}
+recombine_data <- bind_cols(course_info, cluster_data)
+
+names(recombine_data)
+
+cluster_N <- recombine_data %>%
+  filter(cluster == 5) %>%
+  select(course, par, yardage, difficulty, adj_driving_distance, adj_driving_accuracy, fw_width, fw_diff, adj_penalties)
+
+View(cluster_N)
+```
+# Driver Strategy
+
+### Cluster Data
+```{r}
+cluster_cols <- c('yardage_4_5', 'adj_driving_distance', 'adj_sd_distance',
+                  'adj_driving_accuracy', 'ott_sg', 'fw_width', 'fw_diff', 'rgh_diff',  'non_rgh_diff')
+non_cluster <- c('course', 'year')
+course_info_cols <- c('course', 'year')
+
+cluster_data <- data %>% select(cluster_cols) %>% 
+  mutate(across(everything(), ~ tidyr::replace_na(.x, 0)))
+
+course_info <- data %>% 
+  select(course, year)
+```
+
+### Elbow Method
+```{r}
+scaled_data <- scale(cluster_data)
+
+set.seed(123)
+
+fviz_nbclust(
+  scaled_data,
+  kmeans,
+  method = "wss"
+) +
+  geom_vline(xintercept = 6, linetype = 2) +
+  labs(title = "Elbow Method for K Selection")
+```
+
+### Run K-Means
+```{r}
+set.seed(123)
+
+k <- 5
+kmeans_model <- kmeans(
+  scaled_data,
+  centers = k,
+  nstart = 25
+)
+
+cluster_data$cluster <- factor(kmeans_model$cluster)
+```
+
+### PCA Visualization
+```{r}
+pca <- prcomp(scaled_data, center = TRUE, scale. = TRUE)
+
+pca_df <- data.frame(
+  PC1 = pca$x[, 1],
+  PC2 = pca$x[, 2],
+  cluster = cluster_data$cluster
+)
+
+ggplot(pca_df, aes(PC1, PC2, color = cluster)) +
+  geom_point(size = 2, alpha = 0.8) +
+  labs(
+    title = "K-means Clusters (PCA Projection)",
+    x = "PC1",
+    y = "PC2"
+  ) +
+  theme_minimal()
+```
+
+### Interpret Clusters
+```{r}
+cluster_summaries <- cluster_data %>%
+  group_by(cluster) %>%
+  summarise(across(where(is.numeric), mean, na.rm = TRUE), n = n())
+
+View(cluster_summaries)
+
+```
+
+```{r}
+recombine_data <- bind_cols(course_info, cluster_data)
+
+names(recombine_data)
+
+cluster_N <- recombine_data %>%
+  filter(cluster == 2) %>%
+  select(c(course_info_cols, cluster_cols))
+
+View(cluster_N)
+```
+

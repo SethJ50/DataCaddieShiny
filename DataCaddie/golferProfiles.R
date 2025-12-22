@@ -17,6 +17,12 @@ serverGolferProfiles <- function(input, output, session, favorite_players,
                                  playersInTournament, playersInTournamentTourneyNameConv,
                                  playersInTournamentPgaNames, all_player_data) {
   
+  # Get All Player Data
+  all_player_data_reactive <- reactive({
+    get_all_player_data(c(), playersInTournament, 50)$data
+  })
+  
+  
   # Golfer Profiles Player Picker and Star
   output$gp_picker_with_star <- renderUI({
     
@@ -143,19 +149,27 @@ serverGolferProfiles <- function(input, output, session, favorite_players,
     )
   })
   
-  # Stat Summary Panel
+  # Golfer Spider/Radar Plot
   output$gp_spider_plot <- renderUI({
     req(input$gp_player)
     
-    num_rounds <- 50
+    # Return Spider Plot Data - A DataFrame with
+    #   Stat Labels
+    #   Player Data
+    #   Player Data Scaled (Norm)
+    #   Average Data
+    #   Average Data Scaled
+    finalData <- get_spider_plot_data(favorite_players, playersInTournament, input$gp_player, all_player_data_reactive)
     
-    finalData <- get_spider_plot_data(favorite_players, playersInTournament, num_rounds, input$gp_player)
+    # r: Radius - the stat value
+    # theta - where it is (in terms of angle) on the circle
     
+    # Create list of points around plot
+    #   'closed' by adding first point again to end to close circle
     r_closed <- c(finalData$player_s, finalData$player_s[1])
     theta_closed <- c(finalData$stat, finalData$stat[1])
     player_vals_closed <- c(finalData$player, finalData$player[1])
     stat_labels_closed <- c(finalData$stat, finalData$stat[1])
-    
     r_closedF <- c(finalData$avg_s, finalData$avg_s[1])
     field_vals_closed <- c(finalData$average, finalData$average[1])
     
@@ -220,15 +234,13 @@ serverGolferProfiles <- function(input, output, session, favorite_players,
     )
   })
   
-  
-  # Renders stats summary table (summary before bar plots)
-  render_gp_stat_table(input, output, input$gp_player, playersInTournament, stat_config)
-  
+  # Renders Player Stat Summary Table (dropdown table before bar plots)
+  render_gp_stat_table(input, output, input$gp_player, playersInTournament, stat_config, all_player_data_reactive)
   
   # Render Bar Plots
-  allData <- get_all_player_data(c(), playersInTournament, 36)
+  allData <- all_player_data_reactive()
   
-  # For each stat, attempt to setup 'bar' plots for stat (only if active)
+  # For each stat. category, attempt to setup 'bar' plots for category (if tab is active)
   # Note: stat_config is in utils.R
   for (stat_category in names(stat_config)) {
     
@@ -238,7 +250,7 @@ serverGolferProfiles <- function(input, output, session, favorite_players,
     local({
       config_inner <- config
       
-      makeBarPlot(stat_category, config_inner, input, output, playersInTournament)
+      makeBarPlot(stat_category, config_inner, input, output, playersInTournament, all_player_data_reactive)
     })
   }
   
@@ -256,32 +268,40 @@ serverGolferProfiles <- function(input, output, session, favorite_players,
 
 
 ## Spider Plot -----------------------------------------------------------------
-get_spider_plot_data <- function(favorite_players, players_in_tournament, num_rounds, currPlayer) {
+get_spider_plot_data <- function(favorite_players, players_in_tournament, currPlayer, all_player_data_reactive) {
+  # Grab All Player Data
+  allData <- all_player_data_reactive()
   
-  allData <- get_all_player_data(favorite_players, players_in_tournament, num_rounds)
-  allData <- allData$data
-  
+  # Get Stat Columns for Spider Plot
   stat_cols <- c("sgPutt", "sgArg", "sgApp", "sgOtt", "Dr. Dist", "Dr. Acc")
   norm_stat_cols <- paste0(stat_cols, "_norm")
   
+  # Get Averages Stat Values of Each Column
   averages <- sapply(stat_cols, function(col) {
     round(mean(allData[[col]], na.rm = TRUE), 2)
   })
   
+  # Get Player Only Data
   playerData <- allData %>%
     filter(player == currPlayer) %>%
     select(all_of(stat_cols))
   
+  # Get Vector of Player Data Stat Values
   playerDataVec <- round(as.numeric(playerData[1, ]), 2)
   
+  # Get Player Only Norm Data
   playerNormData <- allData %>%
     filter(player == currPlayer) %>%
     select(all_of(norm_stat_cols))
   
+  # Get Vector of Player Data Norm Stat Values
   playerNormVec <- as.numeric(playerNormData[1, ])
   
+  # Create Labels for Stats
   stat_labels <- c("SG: PUTT", "SG: ARG", "SG: APP", "SG: OTT", "DR. DIST", "DR. ACC")
   
+  # Return DataFrame: Stat Labels, Player Data Vect, Player Norm (scaled) Data Vect,
+  #   averages vector, averages scaled vect
   finalData <- data.frame(
     stat = stat_labels,
     player = playerDataVec,
@@ -294,7 +314,7 @@ get_spider_plot_data <- function(favorite_players, players_in_tournament, num_ro
 }
 
 ## Bar Plots -------------------------------------------------------------------
-makeBarPlot <- function(stat_category, config, input, output, playersInTournament) {
+makeBarPlot <- function(stat_category, config, input, output, playersInTournament, all_player_data_reactive) {
   
   # Setup UI Component for Bar Plot
   plot_id <- paste0("gp_", tolower(stat_category), "_multi_plot")
@@ -308,7 +328,7 @@ makeBarPlot <- function(stat_category, config, input, output, playersInTournamen
   })
   
   # Render Plot Output
-  render_barplot_output(input, output, plot_id, playersInTournament, stat_category, config)
+  render_barplot_output(input, output, plot_id, playersInTournament, stat_category, config, all_player_data_reactive)
 }
 
 make_barplot_area <- function(plot_id, num_stats, title = NULL) {
@@ -328,7 +348,7 @@ make_barplot_area <- function(plot_id, num_stats, title = NULL) {
   )
 }
 
-render_barplot_output <- function(input, output, plot_id, playersInTournament, tab_name, config) {
+render_barplot_output <- function(input, output, plot_id, playersInTournament, tab_name, config, all_player_data_reactive) {
   
   # Grabs plot data and renders plot in output for 'bar' plots in golfer profiles
   
@@ -341,18 +361,20 @@ render_barplot_output <- function(input, output, plot_id, playersInTournament, t
       input$gp_player,
       playersInTournament,
       36,
-      config
+      config,
+      all_player_data_reactive
     )
     
     createBarPlot(plot_data)
   })
 }
 
-getBarPlotData <- function(currPlayer, playersInTournament, num_rounds, config) {
+getBarPlotData <- function(currPlayer, playersInTournament, num_rounds, config, all_player_data_reactive) {
   
   # Get all player data
-  allData <- get_all_player_data(c(), playersInTournament, num_rounds)
-  allData <- allData$data
+  #allData <- get_all_player_data(c(), playersInTournament, num_rounds)
+  #allData <- allData$data
+  allData <- all_player_data_reactive()
   
   # Get current player data
   playerData <- allData %>% 
@@ -464,14 +486,14 @@ createBarPlot <- function(plot_data) {
 
 ## Summary Table ---------------------------------------------------------------
 
-render_gp_stat_table <- function(input, output, currPlayer, playersInTournament, config) {
+render_gp_stat_table <- function(input, output, currPlayer, playersInTournament, config, all_player_data_reactive) {
   
   req(input$gp_player)
   
   # Get all players data
-  allData <- get_all_player_data(c(), playersInTournament, 50)
-  allData <- allData$data
+  allData <- all_player_data_reactive()
   
+  # Filter Data to Current Player Only
   playerData <- allData %>% 
     filter(player == currPlayer)
   playerData <- as.data.frame(playerData)
@@ -479,7 +501,7 @@ render_gp_stat_table <- function(input, output, currPlayer, playersInTournament,
   # Configure UI Component (reactable)
   ui_id <- "gp_stat_summary"
   
-  # Make area for Table Output if Stat is Selected
+  # Make area for Table Output if 'SUMMARY' tab is Selected
   output[[ui_id]] <- renderUI({
     req(input$gp_stat_selected == "SUMMARY")
     

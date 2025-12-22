@@ -12,15 +12,20 @@ name_conversion <- c(
   'TPC Sawgrass (THE PLAYERS Stadium Course)' = 'TPC Sawgrass',
   'TPC Scottsdale (Stadium Course)' = 'TPC Scottsdale',
   "Arnold Palmer's Bay Hill Club &amp; Lodge" = "Arnold Palmer's Bay Hill Club & Lodge",
-  'PGA National Resort (The Champion - Par 71)' = 'PGA National Resort (The Champion Course)'
+  'PGA National Resort (The Champion - Par 71)' = 'PGA National Resort (The Champion Course)',
+  'Hamilton Golf & Country Club' = 'Hamilton Golf and Country Club',
+  'Pinehurst Resort & Country Club (Course No. 2)' = 'Pinehurst Resort and Country Club',
+  "Arnold Palmer's Bay Hill Club & Lodge" = "Arnold Palmer's Bay Hill Club & Lodge"
 )
 
 upload_course_difficulty <- function(){
   df <- read_excel("data/course_difficulty/dg_course_table.xlsx")
   
+  # XLSX Name = Mongo Name
   column_map <- c(
     "course" = "course",
-    "adj_score_to_par" = "difficulty"
+    "adj_score_to_par" = "difficulty",
+    "yardage" = "yardage"
   )
   
   missing_cols <- setdiff(names(column_map), names(df))
@@ -37,7 +42,7 @@ upload_course_difficulty <- function(){
                       name_conversion[df$course],
                       df$course)
   
-  df <- df %>% select(course, difficulty)
+  #df <- df %>% select(course, year, par, yardage,  difficulty)
   
   col <- get_mongo_collection("coursedifficulties")
   col$remove('{}')
@@ -45,3 +50,6 @@ upload_course_difficulty <- function(){
   
   cat(paste0("✅ Course difficulty uploaded successfully (", nrow(df), " rows)\n"))
 }
+
+
+
