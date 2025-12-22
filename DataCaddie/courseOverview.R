@@ -20,28 +20,71 @@ serverCourseOverview <- function(input, output, session, favorite_players,
   # Get Round by Round Data
   round_by_round <- data %>%
     filter(Round != "Event") %>% 
-    select(course, dates, eagles, birdies, pars, bogeys, doubleBogeys) %>% 
+    select(course, dates, eagles, birdies, pars, bogeys, doubleBogeys) %>%
+    mutate(
+      eagles = replace_na(eagles, 0),
+      birdies = replace_na(birdies, 0),
+      pars = replace_na(pars, 0),
+      bogeys = replace_na(bogeys, 0),
+      doubleBogeys = replace_na(doubleBogeys, 0)
+    ) %>%
     group_by(course, dates) %>% 
     summarise(
-      avg_eagles = mean(eagles, na.rm = TRUE),
-      avg_birdies = mean(birdies, na.rm = TRUE),
-      avg_pars = mean(pars, na.rm = TRUE),
-      avg_bogeys = mean(bogeys, na.rm = TRUE),
-      avg_doubleBogeys = mean(doubleBogeys, na.rm = TRUE)
+      avg_eagles = mean(eagles),
+      avg_birdies = mean(birdies),
+      avg_pars = mean(pars),
+      avg_bogeys = mean(bogeys),
+      avg_doubleBogeys = mean(doubleBogeys),
+      .groups = "drop"
+    ) %>%
+    mutate(
+      year = as.numeric(paste0("20", substr(dates, nchar(dates)-1, nchar(dates))))
     )
-
-  # Get Data for Course Stats Table
-  table_data <- makeCourseStatsTableData(courseStatsData, round_by_round, input$co_course)
   
-  # Render Stat Summary Table
+  # Set Year Selection
+  output$co_year_selection <- renderUI({
+    req(input$co_course)
+    
+    possible_years <- courseStatsData %>% 
+      filter(course == input$co_course) %>% 
+      pull(year) %>% 
+      unique()
+    
+    
+    tagList(
+      div(style = "display: flex;
+                   gap: 0px;
+                   align-items: center;
+          ",
+          shinyWidgets::pickerInput(
+            inputId = "co_stat_year",
+            label = "Year:",
+            choices = possible_years,
+            selected = possible_years[1]
+          )
+      )
+    )
+  })
+  
+
   output$coStatsTable <- renderReactable({
+    curr_course <- input$co_course
+    curr_year <- input$co_stat_year
+    
+    table_data <- makeCourseStatsTableData(
+      courseStatsData,
+      round_by_round,
+      curr_course,
+      curr_year
+    )
+    
     makeCategoryDropdownTable(table_data)
   })
 }
 
 
 
-makeCourseStatsTableData <- function(all_data, round_data, curr_course) {
+makeCourseStatsTableData <- function(all_data, round_data, curr_course, curr_year) {
   
   # Tourney Name Corrections
   name_conversion <- c(
@@ -152,15 +195,20 @@ makeCourseStatsTableData <- function(all_data, round_data, curr_course) {
   
   # Create Round By Round Table for avg of hole finish types
   #   | Stat | Value | ValueColor | Percentile | Category |
-  all_round_data <- round_data %>% 
-    group_by(course) %>% 
-    summarise(
-      avg_eagles = mean(avg_eagles, na.rm = TRUE),
-      avg_birdies = mean(avg_birdies, na.rm = TRUE),
-      avg_pars = mean(avg_pars, na.rm = TRUE),
-      avg_bogeys = mean(avg_bogeys, na.rm = TRUE),
-      avg_doubleBogeys = mean(avg_doubleBogeys, na.rm = TRUE)
-    )
+  if(curr_year == "all") {
+    all_round_data <- round_data %>% 
+      group_by(course) %>% 
+      summarise(
+        avg_eagles = mean(avg_eagles, na.rm = TRUE),
+        avg_birdies = mean(avg_birdies, na.rm = TRUE),
+        avg_pars = mean(avg_pars, na.rm = TRUE),
+        avg_bogeys = mean(avg_bogeys, na.rm = TRUE),
+        avg_doubleBogeys = mean(avg_doubleBogeys, na.rm = TRUE)
+      )
+  } else {
+    all_round_data <- round_data %>% 
+      filter(as.character(year) == curr_year)
+  }
   
   round_course <- all_round_data %>%
     filter(course == curr_course)
@@ -185,7 +233,12 @@ makeCourseStatsTableData <- function(all_data, round_data, curr_course) {
   
   # Create table_data: All Course Table Stats
   #   | Stat | Value | ValueColor | Percentile | Category |
-  all_stat_data <- all_data %>% filter(year == "all")
+  if(curr_year == "all") {
+    all_stat_data <- all_data %>% filter(year == "all")
+  } else {
+    all_stat_data <- all_data %>% 
+      filter(as.character(year) == curr_year)
+  }
   
   stat_course <- all_stat_data %>% filter(course == curr_course)
   

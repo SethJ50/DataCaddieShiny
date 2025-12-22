@@ -315,6 +315,7 @@ ui <- tagList(
                      options = list(`live-search` = TRUE),
                      width = "100%"
                    ),
+                   uiOutput("co_year_selection"),
                    div(
                      style = "margin-top: 10px; overflow-x: hidden;",
                      reactableOutput("coStatsTable", width = "100%")
