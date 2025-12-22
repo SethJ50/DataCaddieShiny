@@ -760,7 +760,7 @@ renderGpRecentRounds <- function(input, output, playersInTournament) {
         ),
         finish = colDef(
           name = "Fin",
-          width = 35,
+          width = 45,
           align = "center"
         ),
         

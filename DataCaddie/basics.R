@@ -20,7 +20,7 @@ makeColorFunc <- function(palette = c("#F83E3E", "white", "#4579F1"),
 
 makeColDef <- function(col_name, display_name = NULL, width = NULL,
                        sticky = NULL, color_func = NULL, norm_data = NULL,
-                       font_size = NULL) {
+                       font_size = NULL, header_size = NULL) {
   
   style_func <- NULL
   
@@ -35,10 +35,16 @@ makeColDef <- function(col_name, display_name = NULL, width = NULL,
       if(!is.null(color_func)) {
         bg <- "white"
         
-        if (!is.na(norm_data[index])) {
-          bg <- color_func(norm_data[index])
-        } else if (!is.na(value)) {
-          bg <- color_func(value)
+        # Safely convert to numeric if possible
+        value_num <- suppressWarnings(as.numeric(value))
+        norm_num <- suppressWarnings(as.numeric(norm_data[index]))
+        
+        if(!is.na(norm_num)) {
+          bg <- color_func(norm_num)
+        } else if(!is.na(value_num)) {
+          bg <- color_func(value_num)
+        } else {
+          bg <- "white"
         }
         
         styles$background <- bg
@@ -53,20 +59,26 @@ makeColDef <- function(col_name, display_name = NULL, width = NULL,
     }
   }
   
+  if(!is.null(header_size)) {
+    h_size <- paste0(header_size, "px")
+  } else {
+    h_size = "12px";
+  }
+  
   colDef(
     width = width,
     align = "center",
     vAlign = "center",
     sticky = sticky,
     header = function(value) htmltools::tags$div(title = display_name, display_name),
-    headerStyle = list(fontSize = "12px"),
+    headerStyle = list(fontSize = h_size),
     style = style_func
   )
 }
 
 makeBasicTable <- function(data, col_defs, default_sorted, favorite_players, hasFavorites = FALSE,
                            searchable = TRUE, font_size = 15, row_height = 25) {
-  
+  View(data)
   if(hasFavorites) {
     favorite_col_def <- list(
       .favorite = colDef(

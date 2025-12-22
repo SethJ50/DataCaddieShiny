@@ -298,6 +298,19 @@ ui <- tagList(
                   margin: auto;
                   text-align: center;
                 }
+                
+                #co_tables_div .nav-pills .nav-link {
+                  font-size: 13px;
+                  padding: 4px 4px;
+                  margin-right: 1px;
+                  border-radius: 5px;
+                }
+                
+                .favorite-row {
+                    background-color: #FFF9C4 !important;
+                    border-top: 4px solid #FFF9C4;
+                    border-bottom: 4px solid #FFF9C4;
+                }
             ")),
              
              layout_columns(
@@ -323,10 +336,22 @@ ui <- tagList(
                  )
                ),
                card(
-                 uiOutput("courseStats")
+                 
                ),
                card(
-                 
+                 div(
+                   style = "margin-top: 0px; max-width: 100%;",
+                   id = "co_tables_div",
+                   navset_card_pill(
+                     id = "co_tables_selected",
+                     placement = "above",
+                     nav_panel("Course History", uiOutput("co_course_hist_tab")),
+                     nav_panel("Proj. Course Fit", uiOutput("co_proj_fit_tab")),
+                     nav_panel("Similar Course Perf.", uiOutput("co_sim_course_tab")),
+                     nav_panel("OTT Course Perf.", uiOutput("co_ott_perf_tab")),
+                     nav_panel("Scoring History", uiOutput("co_score_hist_tab"))
+                   )
+                 )
                )
              )
              
