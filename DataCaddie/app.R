@@ -291,6 +291,76 @@ ui <- tagList(
                   align-items: center !important;
                   justify-content: center !important;
                   text-align: center !important;
+                  
+                  background-color: #fafafa;
+                  border: 1px solid #ddd;
+                  border-radius: 8px;
+                }
+                
+                #co_stat_year + .dropdown-toggle {
+                  font-size: 10px !important;
+                  height: 25px !important;
+                  padding: 0px 6px !important;
+              
+                  display: flex !important;
+                  align-items: center !important;
+                  justify-content: center !important;
+                  text-align: center !important;
+                  
+                  background-color: #fafafa;
+                  border: 1px solid #ddd;
+                  border-radius: 8px;
+                  margin-top: -15px;
+                }
+                
+                #co_stat_year-label {
+                  font-size: 12px !important;
+                }
+                
+                #co_ch_table_year + .dropdown-toggle {
+                  font-size: 10px !important;
+                  height: 25px !important;
+                  padding: 0px 6px !important;
+                  width: 80px !important;
+              
+                  display: flex !important;
+                  align-items: center !important;
+                  justify-content: center !important;
+                  text-align: center !important;
+                  
+                  background-color: #fafafa;
+                  border: 1px solid #ddd;
+                  border-radius: 8px;
+                  margin-top: -15px;
+                }
+                
+                #co_ch_table_year-label {
+                  font-size: 12px !important;
+                }
+                
+                .co_stat_year-label {
+                  font-size: 10px !important;
+                }
+                
+                #co_ch_table {
+                  margin-top: -45px !important;
+                }
+                
+                .bootstrap-select.form-control {
+                  background-color: white !important;
+                }
+                
+                #modelStatPicker + .dropdown-toggle,
+                #modelStatPicker + .dropdown-toggle.btn {
+                  min-width: 200px;
+                  max-width: 400px;
+                  height: 50px;
+                  line-height: 50px;
+                  font-size: 16px;
+                  margin-bottom: -10px;
+                  background-color: #fafafa;
+                  border: 1px solid #ddd;
+                  border-radius: 4px;
                 }
               
                 #co_course {
@@ -328,9 +398,12 @@ ui <- tagList(
                      options = list(`live-search` = TRUE),
                      width = "100%"
                    ),
-                   uiOutput("co_year_selection"),
                    div(
-                     style = "margin-top: 10px; overflow-x: hidden;",
+                     style="margin-top: 5px;",
+                     uiOutput("co_year_selection")
+                   ),
+                   div(
+                     style = "margin-top: 0px; overflow-x: hidden;",
                      reactableOutput("coStatsTable", width = "100%")
                    )
                  )
@@ -345,7 +418,19 @@ ui <- tagList(
                    navset_card_pill(
                      id = "co_tables_selected",
                      placement = "above",
-                     nav_panel("Course History", uiOutput("co_course_hist_tab")),
+                     nav_panel("Course History",
+                               div(
+                                 style = "z-index: 10; width: fit-content;",
+                                 shinyWidgets::pickerInput(
+                                   inputId = "co_ch_table_year",
+                                   label = "Year:",
+                                   choices = NULL,
+                                   selected = NULL
+                                 )
+                               ),
+                               
+                               reactableOutput("co_ch_table")
+                     ),
                      nav_panel("Proj. Course Fit", uiOutput("co_proj_fit_tab")),
                      nav_panel("Similar Course Perf.", uiOutput("co_sim_course_tab")),
                      nav_panel("OTT Course Perf.", uiOutput("co_ott_perf_tab")),

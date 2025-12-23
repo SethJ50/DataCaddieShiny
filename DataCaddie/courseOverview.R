@@ -18,6 +18,15 @@ serverCourseOverview <- function(input, output, session, favorite_players,
                                  playersInTournament, playersInTournamentTourneyNameConv,
                                  playersInTournamentPgaNames) {
   
+  week_course <- "Augusta National Golf Club"
+  
+  # Set Weekly Course
+  shinyWidgets::updatePickerInput(
+    session,
+    inputId = "co_course",
+    selected = week_course
+  )
+  
   # Get Round by Round Data
   round_by_round <- data %>%
     filter(Round != "Event") %>% 
@@ -42,14 +51,30 @@ serverCourseOverview <- function(input, output, session, favorite_players,
       year = as.numeric(paste0("20", substr(dates, nchar(dates)-1, nchar(dates))))
     )
   
-  # Set Year Selection
-  output$co_year_selection <- renderUI({
+  possible_years <- reactive({
     req(input$co_course)
     
-    possible_years <- courseStatsData %>% 
+    courseStatsData %>% 
       filter(course == input$co_course) %>% 
       pull(year) %>% 
       unique()
+  })
+  
+  observeEvent(possible_years(), {
+    yrs <- possible_years()
+    req(length(yrs) > 0)
+    
+    shinyWidgets::updatePickerInput(
+      session,
+      inputId = "co_ch_table_year",
+      choices = yrs,
+      selected = "all"
+    )
+  })
+  
+  # Set Year Selection
+  output$co_year_selection <- renderUI({
+    req(input$co_course)
     
     
     tagList(
@@ -60,8 +85,8 @@ serverCourseOverview <- function(input, output, session, favorite_players,
           shinyWidgets::pickerInput(
             inputId = "co_stat_year",
             label = "Year:",
-            choices = possible_years,
-            selected = possible_years[1]
+            choices = possible_years(),
+            selected = possible_years()[1]
           )
       )
     )
@@ -70,6 +95,7 @@ serverCourseOverview <- function(input, output, session, favorite_players,
 
   # Output Course Stats Table
   output$coStatsTable <- renderReactable({
+    req(input$co_stat_year)
     curr_course <- input$co_course
     curr_year <- input$co_stat_year
     
@@ -83,15 +109,8 @@ serverCourseOverview <- function(input, output, session, favorite_players,
     makeCategoryDropdownTable(table_data)
   })
   
-  # Make Data for Player Course History Tables
-  ch_table_data <- reactive({
-    req(input$co_course)
-    curr_course <- input$co_course
-    
-    makeCourseHistoryTableData(curr_course, favorite_players, playersInTournament)
-  })
-  
-  makePlayerTable(input, output, favorite_players, playersInTournament, ch_table_data)
+  # Make Player Tables
+  makePlayerTable(input, output, favorite_players, playersInTournament, input$curr_course)
 }
 
 
@@ -358,16 +377,27 @@ makeCategoryDropdownTable <- function(table_data) {
   return(table)
 }
 
-makePlayerTable <- function(input, output, favorite_players, playersInTournament, ch_table_data) {
-  output$co_course_hist_tab <- renderUI({
-    req(input$co_tables_selected == "Course History")
-    
-    reactableOutput("co_ch_table")
-  })
+makePlayerTable <- function(input, output, favorite_players, playersInTournament, curr_course) {
   
-  if(input$co_tables_selected == "Course History") {
-    makeCourseHistoryTable(output, ch_table_data(), favorite_players)
-  }
+  output$co_ch_table <- renderReactable({
+    req(input$co_course)
+    req(input$co_ch_table_year)
+    
+    ch_table_data <- makeCourseHistoryTableData(
+      curr_course = input$co_course,
+      favorite_players = favorite_players,
+      playersInTournament = playersInTournament,
+      curr_year = input$co_ch_table_year
+    )
+    
+    if(!is.null(ch_table_data)){
+      makeCourseHistoryTable(
+        ch_table_data = ch_table_data,
+        favorite_players = favorite_players,
+        year = input$co_ch_table_year
+      )
+    }
+  })
   
   output$co_proj_fit_tab <- renderUI({
     req(input$co_tables_selected == "Proj. Course Fit")
@@ -394,7 +424,7 @@ makePlayerTable <- function(input, output, favorite_players, playersInTournament
   })
 }
 
-makeCourseHistoryTableData <- function(curr_course, favorite_players, playersInTournament) {
+makeCourseHistoryTableData <- function(curr_course, favorite_players, playersInTournament, curr_year) {
   
   # Make Name Conversions
   playersInTournamentTourneyNameConv <- nameFanduelToTournament(playersInTournament)
@@ -413,65 +443,134 @@ makeCourseHistoryTableData <- function(curr_course, favorite_players, playersInT
   }
   
   # Get SG & finish data for tournament rounds
-  #   | player | sgPutt | ... | sgOtt | drAcc | drDist | numRds |
-  tournament_data <- data %>% 
-    filter(
-      player %in% playersInTournamentTourneyNameConv,
-      course == curr_course,
-      Round != "Event"
-    ) %>% 
-    arrange(dates) %>% 
-    group_by(player) %>% 
-    summarise(
-      tournament = last(tournament),
-      best_fin = {
-        x <- min(finish, na.rm = TRUE)
-        ifelse(x == 100, "CUT", as.character(x))
-      },
-      worst_fin = {
-        x <- max(finish, na.rm = TRUE)
-        ifelse(x == 100, "CUT", as.character(x))
-      },
-      made_cut_pct = {
-        fin_by_event <- distinct(cur_data(), dates, finish)
-        round(mean(fin_by_event$finish < 100, na.rm = TRUE) * 100, 1)
-      },
-      sgPutt = round(mean(sgPutt, na.rm = TRUE), 2),
-      sgArg  = round(mean(sgArg,  na.rm = TRUE), 2),
-      sgApp  = round(mean(sgApp,  na.rm = TRUE), 2),
-      sgOtt  = round(mean(sgOtt,  na.rm = TRUE), 2),
-      sgTot = round(mean(sgTot, na.rm = TRUE), 2),
-      drAcc  = {
-        val <- round(mean(drAcc,  na.rm = TRUE), 2)
-        if(is.nan(val)) {
-          val <- NA
-        }
+  if(curr_year == "all") {
+    #   | player | sgPutt | ... | sgOtt | drAcc | drDist | numRds |
+    tournament_data <- data %>% 
+      filter(
+        player %in% playersInTournamentTourneyNameConv,
+        course == curr_course,
+        Round != "Event"
+      ) %>% 
+      arrange(dates) %>% 
+      group_by(player) %>% 
+      summarise(
+        tournament = last(tournament),
+        best_fin = {
+          x <- min(finish, na.rm = TRUE)
+          ifelse(x == 100, "CUT", as.character(x))
+        },
+        worst_fin = {
+          x <- max(finish, na.rm = TRUE)
+          ifelse(x == 100, "CUT", as.character(x))
+        },
+        made_cut_pct = {
+          fin_by_event <- distinct(cur_data(), dates, finish)
+          round(mean(fin_by_event$finish < 100, na.rm = TRUE) * 100, 1)
+        },
+        sgPutt = round(mean(sgPutt, na.rm = TRUE), 2),
+        sgArg  = round(mean(sgArg,  na.rm = TRUE), 2),
+        sgApp  = round(mean(sgApp,  na.rm = TRUE), 2),
+        sgOtt  = round(mean(sgOtt,  na.rm = TRUE), 2),
+        sgTot = round(mean(sgTot, na.rm = TRUE), 2),
+        drAcc  = {
+          val <- round(mean(drAcc,  na.rm = TRUE), 2)
+          if(is.nan(val)) {
+            val <- NA
+          }
+          
+          val
+        },
+        drDist = {
+          val <- round(mean(drDist, na.rm = TRUE), 2)
+          if(is.nan(val)) {
+            val <- NA
+          }
+          
+          val
+        },
         
-        val
-      },
-      drDist = {
-        val <- round(mean(drDist, na.rm = TRUE), 2)
-        if(is.nan(val)) {
-          val <- NA
-        }
+        numRds = n(),
+        .groups = "drop"
+      )
+    
+    if(nrow(tournament_data) < 1) {
+      return(NULL)
+    }
+    
+    tournament_data <- tournament_data %>% 
+      mutate(
+        Player = player,
+        made_cut_pct_perc = round(sapply(made_cut_pct, calculatePercentile, made_cut_pct), 1),
+        sgPutt_perc      = round(sapply(sgPutt, calculatePercentile, sgPutt), 1),
+        sgArg_perc       = round(sapply(sgArg,  calculatePercentile, sgArg), 1),
+        sgApp_perc       = round(sapply(sgApp,  calculatePercentile, sgApp), 1),
+        sgOtt_perc       = round(sapply(sgOtt,  calculatePercentile, sgOtt), 1),
+        sgTot_perc       = round(sapply(sgTot,  calculatePercentile, sgTot), 1),
+        drAcc_perc       = round(sapply(drAcc,  calculatePercentile, drAcc), 1),
+        drDist_perc      = round(sapply(drDist, calculatePercentile, drDist), 1)
+      )
+  } else {
+    #   | player | dates | sgPutt | ... | sgOtt | drAcc | drDist | numRds |
+    tournament_data <- data %>% 
+      filter(
+        Round != "Event"
+      ) %>% 
+      mutate(
+        year = as.numeric(paste0("20", substr(dates, nchar(dates)-1, nchar(dates))))
+      ) %>% 
+      filter(
+        player %in% playersInTournamentTourneyNameConv,
+        course == curr_course,
+        as.character(year) == curr_year
+      ) %>% 
+      arrange(dates) %>% 
+      group_by(player) %>% 
+      summarise(
+        tournament = last(tournament),
+        date = last(dates),
+        finish = last(finish),
+        sgPutt = round(mean(sgPutt, na.rm = TRUE), 2),
+        sgArg  = round(mean(sgArg,  na.rm = TRUE), 2),
+        sgApp  = round(mean(sgApp,  na.rm = TRUE), 2),
+        sgOtt  = round(mean(sgOtt,  na.rm = TRUE), 2),
+        sgTot = round(mean(sgTot, na.rm = TRUE), 2),
+        drAcc  = {
+          val <- round(mean(drAcc,  na.rm = TRUE), 2)
+          if(is.nan(val)) {
+            val <- NA
+          }
+          
+          val
+        },
+        drDist = {
+          val <- round(mean(drDist, na.rm = TRUE), 2)
+          if(is.nan(val)) {
+            val <- NA
+          }
+          
+          val
+        },
         
-        val
-      },
-      
-      numRds = n(),
-      .groups = "drop"
-    ) %>% 
-    mutate(
-      Player = player,
-      made_cut_pct_perc = round(sapply(made_cut_pct, calculatePercentile, made_cut_pct), 1),
-      sgPutt_perc      = round(sapply(sgPutt, calculatePercentile, sgPutt), 1),
-      sgArg_perc       = round(sapply(sgArg,  calculatePercentile, sgArg), 1),
-      sgApp_perc       = round(sapply(sgApp,  calculatePercentile, sgApp), 1),
-      sgOtt_perc       = round(sapply(sgOtt,  calculatePercentile, sgOtt), 1),
-      sgTot_perc       = round(sapply(sgTot,  calculatePercentile, sgTot), 1),
-      drAcc_perc       = round(sapply(drAcc,  calculatePercentile, drAcc), 1),
-      drDist_perc      = round(sapply(drDist, calculatePercentile, drDist), 1)
-    )
+        numRds = n(),
+        .groups = "drop"
+      )
+    
+    if(nrow(tournament_data) < 1) {
+      return(NULL)
+    }
+    
+    tournament_data <- tournament_data %>% 
+      mutate(
+        Player = player,
+        sgPutt_perc      = round(sapply(sgPutt, calculatePercentile, sgPutt), 1),
+        sgArg_perc       = round(sapply(sgArg,  calculatePercentile, sgArg), 1),
+        sgApp_perc       = round(sapply(sgApp,  calculatePercentile, sgApp), 1),
+        sgOtt_perc       = round(sapply(sgOtt,  calculatePercentile, sgOtt), 1),
+        sgTot_perc       = round(sapply(sgTot,  calculatePercentile, sgTot), 1),
+        drAcc_perc       = round(sapply(drAcc,  calculatePercentile, drAcc), 1),
+        drDist_perc      = round(sapply(drDist, calculatePercentile, drDist), 1)
+      )
+  }
   
   favs <- favorite_players$names
   
@@ -489,13 +588,21 @@ makeCourseHistoryTableData <- function(curr_course, favorite_players, playersInT
   return(tournament_data)
 }
 
-makeCourseHistoryTable <- function(output, ch_table_data, favorite_players) {
-  table_cols <- list(
-    Player = "Player", best_fin = "Best",
-    worst_fin = "Worst", made_cut_pct = "InCut%",
-    sgPutt = "SG: PUTT", sgArg = "SG: ARG", sgApp = "SG: APP", sgOtt = "SG: OTT",
-    sgTot = "SG: TOT", drAcc = "DR. ACC", drDist = "DR. DIST", numRds = "Rds"
-  )
+makeCourseHistoryTable <- function(output, ch_table_data, favorite_players, year) {
+  if(year == "all") {
+    table_cols <- list(
+      Player = "Player", best_fin = "Best",
+      worst_fin = "Worst", made_cut_pct = "InCut%",
+      sgPutt = "SG: PUTT", sgArg = "SG: ARG", sgApp = "SG: APP", sgOtt = "SG: OTT",
+      sgTot = "SG: TOT", drAcc = "DR. ACC", drDist = "DR. DIST", numRds = "Rds"
+    )
+  } else {
+    table_cols <- list(
+      Player = "Player", date = "Date", finish = "Fin",
+      sgPutt = "SG: PUTT", sgArg = "SG: ARG", sgApp = "SG: APP", sgOtt = "SG: OTT",
+      sgTot = "SG: TOT", drAcc = "DR. ACC", drDist = "DR. DIST", numRds = "Rds"
+    )
+  }
   
   # Make column defs
   col_defs <- lapply(names(table_cols), function(col) {
@@ -535,10 +642,10 @@ makeCourseHistoryTable <- function(output, ch_table_data, favorite_players) {
   table_data <- ch_table_data %>% 
     select(`.favorite`, names(table_cols), isFavorite)
   
-  output$co_ch_table <- renderReactable({
-    makeBasicTable(table_data, col_defs, "sgTot", favorite_players, hasFavorites = TRUE,
-                   font_size = 10, row_height = 22)
-  })
+  table <- makeBasicTable(table_data, col_defs, "sgTot", favorite_players, hasFavorites = TRUE,
+                 font_size = 10, row_height = 22)
+  
+  return(table)
 }
 
 

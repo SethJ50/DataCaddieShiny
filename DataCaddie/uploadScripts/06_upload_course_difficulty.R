@@ -6,13 +6,7 @@ source("uploadUtils/db_connection.R")
 name_conversion <- c(
   'ACCORDIA GOLF Narashino Country Club' = 'Accordia Golf Narashino Country Club',
   'Hamilton Golf &amp; Country Club' = 'Hamilton Golf and Country Club',
-  'PGA National Resort (The Champion)' = 'PGA National Resort',
-  'Pinehurst Resort &amp; Country Club (Course No. 2)' = 'Pinehurst Resort and Country Club',
-  'TPC San Antonio (Oaks Course)' = 'TPC San Antonio',
-  'TPC Sawgrass (THE PLAYERS Stadium Course)' = 'TPC Sawgrass',
-  'TPC Scottsdale (Stadium Course)' = 'TPC Scottsdale',
   "Arnold Palmer's Bay Hill Club &amp; Lodge" = "Arnold Palmer's Bay Hill Club & Lodge",
-  'PGA National Resort (The Champion - Par 71)' = 'PGA National Resort (The Champion Course)',
   'Hamilton Golf & Country Club' = 'Hamilton Golf and Country Club',
   'Pinehurst Resort & Country Club (Course No. 2)' = 'Pinehurst Resort and Country Club',
   "Arnold Palmer's Bay Hill Club & Lodge" = "Arnold Palmer's Bay Hill Club & Lodge"

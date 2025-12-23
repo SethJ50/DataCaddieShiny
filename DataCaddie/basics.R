@@ -78,7 +78,6 @@ makeColDef <- function(col_name, display_name = NULL, width = NULL,
 
 makeBasicTable <- function(data, col_defs, default_sorted, favorite_players, hasFavorites = FALSE,
                            searchable = TRUE, font_size = 15, row_height = 25) {
-  View(data)
   if(hasFavorites) {
     favorite_col_def <- list(
       .favorite = colDef(
