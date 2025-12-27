@@ -543,3 +543,21 @@ get_stat_summary_data <- function(data, pgaData, playersInTournamentTourneyNameC
   
   return(player_row)
 }
+
+getLastNRoundsPriorTo <- function(curr_player, curr_date, N) {
+  
+  last_n_data <- data %>%
+    mutate(
+      date_parsed = as.Date(dates, format = "%m/%d/%y")
+    ) %>%
+    filter(
+      player == curr_player,
+      date_parsed < as.Date(curr_date, format = "%m/%d/%y"),
+      Round %in% 1:4
+    ) %>%
+    arrange(desc(date_parsed), desc(Round)) %>%
+    slice_head(n = N)
+  
+  return(last_n_data)
+  
+}

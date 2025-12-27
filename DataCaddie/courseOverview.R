@@ -9,6 +9,7 @@ library(ggplot2)
 library(ggrepel)
 library(plotly)
 library(showtext)
+library(shinycssloaders)
 
 source("utils.R")
 source("playersDataFunctions.R")
@@ -109,8 +110,29 @@ serverCourseOverview <- function(input, output, session, favorite_players,
     makeCategoryDropdownTable(table_data)
   })
   
+  course_fit_cache <- reactiveValues()
+  
+  course_fit_data <- reactive({
+    req(input$co_course)
+    
+    # If cache already has this course, just return it
+    if (!is.null(course_fit_cache[[input$co_course]])) {
+      return(course_fit_cache[[input$co_course]])
+    }
+    
+    # Otherwise compute and store
+    proj_fit_data <- makeProjFitData(
+      curr_course = input$co_course,
+      favorite_players = favorite_players,
+      playersInTournament = playersInTournament
+    )
+    
+    course_fit_cache[[input$co_course]] <- proj_fit_data
+    proj_fit_data
+  })
+  
   # Make Player Tables
-  makePlayerTable(input, output, favorite_players, playersInTournament, input$curr_course)
+  makePlayerTable(input, output, favorite_players, playersInTournament, input$curr_course, course_fit_data)
 }
 
 
@@ -377,7 +399,7 @@ makeCategoryDropdownTable <- function(table_data) {
   return(table)
 }
 
-makePlayerTable <- function(input, output, favorite_players, playersInTournament, curr_course) {
+makePlayerTable <- function(input, output, favorite_players, playersInTournament, curr_course, course_fit_data) {
   
   output$co_ch_table <- renderReactable({
     req(input$co_course)
@@ -402,7 +424,18 @@ makePlayerTable <- function(input, output, favorite_players, playersInTournament
   output$co_proj_fit_tab <- renderUI({
     req(input$co_tables_selected == "Proj. Course Fit")
     
+    table_data <- course_fit_data()
+    req(table_data)
     
+    table_data <- table_data %>%
+      mutate(isFavorite = player %in% favorite_players$names)
+    
+    if(!is.null(table_data)) {
+      makeCourseFitTable(
+        table_data = table_data,
+        favorite_players = favorite_players
+      )
+    }
   })
   
   output$co_sim_course_tab <- renderUI({
@@ -588,6 +621,128 @@ makeCourseHistoryTableData <- function(curr_course, favorite_players, playersInT
   return(tournament_data)
 }
 
+makeProjFitData <- function(curr_course, favorite_players, playersInTournament) {
+  
+  # Make Name Conversions
+  playersInTournamentTourneyNameConv <- nameFanduelToTournament(playersInTournament)
+  playersInTournamentPgaNames <- nameFanduelToPga(playersInTournament)
+  
+  
+  # Function to Calculate the Percentile of a value within a column's data
+  calculatePercentile <- function(value, column_data) {
+    column_data <- column_data[!is.na(column_data)]
+    
+    mean(column_data <= value) * 100
+  }
+  
+  # Load Models
+  all_models <- readRDS("course_history_models.rds")
+  curr_model_info <- all_models[[curr_course]]
+  if(is.null(curr_model_info)) return(NULL)
+  curr_model <- curr_model_info$model
+  model_features <- curr_model_info$features
+  
+  # Initialize Results List
+  results_list <- list()
+  
+  today_date <- format(Sys.Date(), "%m/%d/%y")
+  
+  # Build up dataframe | player | sg {putt / arg / app / sgTot} | dr {dist / acc} | numRds | course fit
+  for (curr_player in playersInTournamentTourneyNameConv) {
+    
+    # Get last 50 rounds for player prior to today
+    last50Rds <- getLastNRoundsPriorTo(curr_player, today_date, 50)
+    if(nrow(last50Rds) == 0) next
+    
+    rounds_clean <- last50Rds %>% 
+      filter(
+        !is.na(sgPutt),
+        !is.na(sgArg),
+        !is.na(sgApp),
+        !is.na(drDist),
+        !is.na(drAcc)
+      )
+    if (nrow(rounds_clean) == 0) next
+    
+    rounds_clean <- rounds_clean %>% 
+      select(-sgTot) %>% 
+      left_join(
+        data %>% 
+          filter(Round == "Event") %>% 
+          select(player, tournament, dates, sgTot),
+        by = c("player", "tournament", "dates")
+      ) %>%
+      rename(sg_tot_event = sgTot) %>%
+      filter(!is.na(sg_tot_event))
+    if (nrow(rounds_clean) == 0) next
+    
+    agg <- rounds_clean %>%
+      summarise(
+        sg_putt_l50 = mean(sgPutt),
+        sg_arg_l50  = mean(sgArg),
+        sg_app_l50  = mean(sgApp),
+        dr_dist_l50 = mean(drDist),
+        dr_acc_l50  = mean(drAcc),
+        sg_tot_l50 = mean(sg_tot_event),
+        numRds      = n()
+      )
+    if (agg$numRds < 8) next
+    
+    player_data <- agg %>% 
+      select(all_of(model_features)) %>% 
+      as.matrix()
+    
+    sgPred <- predict(curr_model, player_data)
+    course_fit <- sgPred - agg$sg_tot_l50
+    
+    results_list[[curr_player]] <- data.frame(
+      player = curr_player,
+      sg_putt_l50 = round(agg$sg_putt_l50, 2),
+      sg_arg_l50  = round(agg$sg_arg_l50, 2),
+      sg_app_l50  = round(agg$sg_app_l50, 2),
+      dr_dist_l50 = round(agg$dr_dist_l50, 2),
+      dr_acc_l50  = round(agg$dr_acc_l50, 2),
+      sgTot = round(agg$sg_tot_l50, 2),
+      projSgTot = round(sgPred, 2),
+      course_fit = round(course_fit, 2),
+      numRds = agg$numRds,
+      stringsAsFactors = FALSE
+    )
+  }
+  
+  result_data <- bind_rows(results_list)
+  if(nrow(result_data) == 0) return(NULL)
+  
+  # Add Percentile Columns for future coloring
+  result_data <- result_data %>% 
+    mutate(
+      Player = player,
+      sg_putt_l50_perc      = round(sapply(sg_putt_l50, calculatePercentile, sg_putt_l50), 1),
+      sg_arg_l50_perc       = round(sapply(sg_arg_l50,  calculatePercentile, sg_arg_l50), 1),
+      sg_app_l50_perc       = round(sapply(sg_app_l50,  calculatePercentile, sg_app_l50), 1),
+      dr_dist_l50_perc       = round(sapply(dr_dist_l50,  calculatePercentile, dr_dist_l50), 1),
+      dr_acc_l50_perc       = round(sapply(dr_acc_l50,  calculatePercentile, dr_acc_l50), 1),
+      sgTot_perc       = round(sapply(sgTot,  calculatePercentile, sgTot), 1),
+      projSgTot_perc = round(sapply(projSgTot,  calculatePercentile, projSgTot), 1),
+      course_fit_perc       = round(sapply(course_fit,  calculatePercentile, course_fit), 1)
+    )
+  
+  # Mark favorite players
+  favs <- favorite_players$names
+  result_data <- result_data %>% 
+    mutate(
+      isFavorite = player %in% favs
+    )
+  
+  # Create .favorite column to hold star	
+  result_data$.favorite <- NA
+  
+  # Rearrange .favorite to be the first column
+  result_data <- result_data[, c(".favorite", setdiff(names(result_data), ".favorite"))]
+  
+  return(result_data)
+}
+
 makeCourseHistoryTable <- function(output, ch_table_data, favorite_players, year) {
   if(year == "all") {
     table_cols <- list(
@@ -648,4 +803,54 @@ makeCourseHistoryTable <- function(output, ch_table_data, favorite_players, year
   return(table)
 }
 
-
+makeCourseFitTable <- function(table_data, favorite_players) {
+  table_cols <- list(
+    Player = "Player", 
+    sg_putt_l50 = "SG: PUTT", sg_arg_l50 = "SG: ARG", sg_app_l50 = "SG: APP",
+    dr_dist_l50 = "DR. DIST", dr_acc_l50 = "DR. ACC",
+    sgTot = "SG: TOT", projSgTot = "Proj. SG: TOT", course_fit = "REL FIT", numRds = "Rds"
+  )
+  
+  # Make column defs
+  col_defs <- lapply(names(table_cols), function(col) {
+    norm_col <- paste0(col, "_perc")
+    
+    if (norm_col %in% names(table_data)) {
+      norm_data <- table_data[[norm_col]]
+      col_func <- makeColorFunc(min_val = 0, max_val = 100)
+    } else {
+      norm_data <- NULL
+      col_func <- NULL
+    }
+    
+    col_inner <- table_cols[[col]]
+    
+    width <- case_when(
+      col_inner %in% c("Player") ~ 150,
+      col_inner == "Proj. SG: TOT" ~ 90,
+      col_inner == "Rds" ~ 35,
+      TRUE ~ 60
+    )
+    
+    makeColDef(
+      col_name = col,
+      display_name = table_cols[[col]],
+      width = width,
+      color_func = col_func,
+      norm_data = norm_data,
+      header_size = 10
+    )
+  })
+  
+  names(col_defs) <- names(table_cols)
+  
+  col_defs[["isFavorite"]] <- colDef(show = FALSE)
+  
+  table_data <- table_data %>% 
+    select(`.favorite`, names(table_cols), isFavorite)
+  
+  table <- makeBasicTable(table_data, col_defs, "projSgTot", favorite_players, hasFavorites = TRUE,
+                          font_size = 10, row_height = 22)
+  
+  return(table)
+}

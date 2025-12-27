@@ -431,7 +431,7 @@ ui <- tagList(
                                
                                reactableOutput("co_ch_table")
                      ),
-                     nav_panel("Proj. Course Fit", uiOutput("co_proj_fit_tab")),
+                     nav_panel("Proj. Course Fit", uiOutput("co_proj_fit_tab") %>% withSpinner(color = "#0dc5c1")),
                      nav_panel("Similar Course Perf.", uiOutput("co_sim_course_tab")),
                      nav_panel("OTT Course Perf.", uiOutput("co_ott_perf_tab")),
                      nav_panel("Scoring History", uiOutput("co_score_hist_tab"))
