@@ -75,7 +75,7 @@ trainCourseFitModels <- function() {
     model <- xgb.train(
       params = params,
       data = dtrain,
-      nrounds = 1000,
+      nrounds = 500,
       early_stopping_rounds = 30,
       watchlist = list(train = dtrain),
       verbose = 0

@@ -338,6 +338,27 @@ ui <- tagList(
                   font-size: 12px !important;
                 }
                 
+                #co_fit_viz + .dropdown-toggle {
+                  font-size: 10px !important;
+                  height: 25px !important;
+                  padding: 0px 6px !important;
+                  width: 200px !important;
+              
+                  display: flex !important;
+                  align-items: center !important;
+                  justify-content: center !important;
+                  text-align: center !important;
+                  
+                  background-color: #fafafa;
+                  border: 1px solid #ddd;
+                  border-radius: 8px;
+                  margin-top: -15px;
+                }
+                
+                #co_fit_viz-label {
+                  font-size: 12px !important;
+                }
+                
                 .co_stat_year-label {
                   font-size: 10px !important;
                 }
@@ -376,6 +397,42 @@ ui <- tagList(
                   border-radius: 5px;
                 }
                 
+                /* --- Importance Type Styling --- */
+                /* Container background */
+                #co_importance_type .btn-group {
+                  background-color: #e0e0e0; /* light grey container */
+                  border-radius: 6px;
+                  padding: 2px;
+                }
+                
+                /* Buttons styling */
+                #co_importance_type .btn {
+                  background-color: transparent !important;
+                  color: #001f3f !important;
+                  border: none !important; 
+                  min-height: 28px !important;
+                  padding: 2px 6px !important;
+                  margin: 0 2px; /* small gap between buttons */
+                  font-size: 14px; /* adjust text size */
+                }
+                
+                /* Checked button */
+                #co_importance_type .btn.active {
+                  background-color: #c0c0c0 !important; /* slightly darker grey when active */
+                  color: #001f3f !important;
+                }
+                
+                /* Hover effect */
+                #co_importance_type .btn:hover {
+                  background-color: #d0d0d0 !important;
+                  color: #001f3f !important;
+                }
+                
+                /* Remove default shadows */
+                #co_importance_type .btn:focus {
+                  box-shadow: none !important;
+                }
+                
                 .favorite-row {
                     background-color: #FFF9C4 !important;
                     border-top: 4px solid #FFF9C4;
@@ -409,7 +466,38 @@ ui <- tagList(
                  )
                ),
                card(
-                 
+                 shinyWidgets::pickerInput(
+                   inputId = "co_fit_viz",
+                   label = "Course Fit Visualization:",
+                   choices = c("Basic Stats","Course Attributes", "OTT Strategy"),
+                   selected = "Basic Stats",
+                   width = "100%"
+                 ),
+                 conditionalPanel(
+                   condition = "input.co_fit_viz == 'Basic Stats'",
+                   div(
+                     style = "display: flex; align-items: center; gap: 10px;",
+                     shinyWidgets::radioGroupButtons(
+                       inputId = "co_importance_type",
+                       label = NULL,
+                       choices = c("Scaled" = "scaled", "Raw" = "raw"),
+                       selected = "raw",
+                       justified = FALSE, # allow horizontal layout
+                       checkIcon = list(yes = icon("check")),
+                       status = "primary",
+                       size = "sm"
+                     ),
+                     actionButton(
+                       inputId = "co_importance_info",
+                       label = icon("info-circle"),
+                       style = "padding: 4px 8px; font-size: 16px;"
+                     )
+                   )
+                 ),
+                 div(
+                   style = "width: 100%, max-width: 350px; margin-left: auto; margin-right: auto; text-align: center;",
+                   plotlyOutput("co_stat_radar", height = "250px", width = "100%")
+                 )
                ),
                card(
                  div(

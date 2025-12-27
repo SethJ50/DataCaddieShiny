@@ -93,7 +93,36 @@ serverCourseOverview <- function(input, output, session, favorite_players,
     )
   })
   
-
+  ## Make Center Visualization Console
+  # Make Radar Plot
+  output$co_stat_radar <- renderPlotly({
+    req(input$co_course, input$co_fit_viz)
+    
+    makeCoRadarPlot(input, output, input$co_course)
+  })
+  
+  observeEvent(input$co_importance_info, {
+    showModal(modalDialog(
+      title = "Importance Type Explanation",
+      HTML(
+        "<b>Scaled:</b> Shows absolute predictive power of each feature, exhibiting,
+        for example, that approach is more predictive than putting on all
+        courses.
+        ==> Use this to develop predictive models for the course, taking into
+        account predictive power of each feature<br/>
+       <b>Raw:</b> Z-Score Normalizes each feature and plots current courses
+        value as number of standard deviations above or below average. Shows
+        more clearly the differences in importance of features across courses,
+        but doesn't show the absolute importance of the feature in comparison
+        to one another. 
+        ==> Use this to evaluate differences between courses
+          i.e. see how the importance of stats of this course differs from others"
+      ),
+      easyClose = TRUE,
+      footer = modalButton("Close")
+    ))
+  })
+  
   # Output Course Stats Table
   output$coStatsTable <- renderReactable({
     req(input$co_stat_year)
@@ -133,6 +162,235 @@ serverCourseOverview <- function(input, output, session, favorite_players,
   
   # Make Player Tables
   makePlayerTable(input, output, favorite_players, playersInTournament, input$curr_course, course_fit_data)
+}
+
+makeCoRadarPlotData <- function(input, curr_course) {
+  
+  req(curr_course)
+  req(input$co_fit_viz)
+  
+  if(input$co_fit_viz == "Basic Stats") {
+    # Output DataFrame with Stat Labels,
+    #   Curr Course Data, Curr Course Data Scaled (Normalized),
+    #   Average Course Data, Average Course Data Scaled (Normalized)
+    # 	| stat | curr_value | curr_scaled | avg_value | avg_scaled |
+    
+    # Get Model Features
+    all_models <- readRDS("course_history_models.rds")
+    curr_model_info <- all_models[[curr_course]]
+    if(is.null(curr_model_info)) return(NULL)
+    model_features <- curr_model_info$features
+    
+    # Define global feature list
+    global_features <- unique(unlist(
+      lapply(all_models, function(x) x$features)
+    ))
+    
+    # Normalizer Function
+    normalize <- function(x, min_val, max_val) {
+      ifelse(
+        max_val == min_val,
+        0,
+        (x - min_val) / (max_val - min_val)
+      )
+    }
+    
+    # Collect SHAP Data for all courses
+    #   | course | stat | shap_value | 
+    shap_all_courses <- purrr::map_dfr(
+      names(all_models),
+      function(course) {
+        shap_wide <- all_models[[course]]$shap_agg
+        if (is.null(shap_wide)) return(NULL)
+        
+        shap_wide %>%
+          mutate(course = course) %>%
+          tidyr::pivot_longer(
+            cols = all_of(model_features),
+            names_to = "stat",
+            values_to = "shap_value"
+          )
+      }
+    )
+    
+    # Collect Model Importance for all courses
+    importance_all <- purrr::map_dfr(
+      names(all_models),
+      function(course) {
+        model <- all_models[[course]]$model
+        if (is.null(model)) return(NULL)
+        
+        imp <- xgboost::xgb.importance(
+          model = model,
+          feature_names = global_features
+        )
+        
+        # Zero-fill missing features
+        tibble(stat = global_features) %>%
+          left_join(
+            imp %>% select(stat = Feature, importance = Gain),
+            by = "stat"
+          ) %>%
+          mutate(
+            importance = replace_na(importance, 0),
+            course = course
+          )
+      }
+    )
+    
+    # Current Course Data Values
+    curr_course_data <- importance_all %>%
+      filter(course == curr_course) %>%
+      select(stat, curr_value = importance)
+    
+    # Average Course Values
+    avg_course_data <- importance_all %>%
+      group_by(stat) %>%
+      summarise(
+        avg_value = mean(importance, na.rm = TRUE),
+        .groups = "drop"
+      )
+    
+    # Determine Min, Max ranges for each model stat
+    norm_ranges <- importance_all %>%
+      group_by(stat) %>%
+      summarise(
+        min_val = min(importance, na.rm = TRUE),
+        max_val = max(importance, na.rm = TRUE),
+        .groups = "drop"
+      )
+    
+    # Determine mean and sd for each feature
+    stats_ranges <- importance_all %>%
+      group_by(stat) %>%
+      summarise(
+        mean_val = mean(importance, na.rm = TRUE),
+        sd_val   = sd(importance, na.rm = TRUE),
+        .groups = "drop"
+      )
+    
+    pretty_stat_labels <- c(
+      sg_putt_l50 = "SG: PUTT",
+      sg_arg_l50  = "SG: ARG",
+      sg_app_l50  = "SG: APP",
+      dr_dist_l50 = "DR. DIST",
+      dr_acc_l50  = "DR. ACC"
+    )
+    
+    radar_data <- curr_course_data %>%
+      left_join(avg_course_data, by = "stat") %>%
+      left_join(stats_ranges, by = "stat") %>%
+      mutate(
+        curr_scaled = ifelse(sd_val == 0, 0, (curr_value - mean_val) / sd_val),
+        avg_scaled  = ifelse(sd_val == 0, 0, (avg_value - mean_val) / sd_val)
+      ) %>%
+      transmute(
+        stat,
+        stat_label = pretty_stat_labels[stat] %||% stat,
+        curr_value  = round(curr_value, 3),
+        curr_scaled = round(curr_scaled, 2),
+        avg_value   = round(avg_value, 3),
+        avg_scaled  = round(avg_scaled, 2)
+      )
+    
+    
+    return(radar_data)
+  } else {
+    return(NULL)
+  }
+}
+
+makeCoRadarPlot <- function(input, output, curr_course) {
+  
+  radar_data <- makeCoRadarPlotData(input, curr_course)
+  if (is.null(radar_data)) return(NULL)
+  
+  # Create list of points around plot
+  #   'closed' by adding first point again to end to close circle
+  
+  # Establish Plotting of Raw vs. Scaled
+  #   Raw: Shows absolute predictive power of each feature, exhibiting,
+  #     for example, that approach is more predictive than putting on all
+  #     courses.
+  #     ==> Use this to develop predictive models for the course, taking into
+  #     account predictive power of each feature
+  #   Scaled: Z-Score Normalizes each feature and plots current courses
+  #     value as number of standard deviations above or below average. Shows
+  #     more clearly the differences in importance of features across courses,
+  #     but doesn't show the absolute importance of the feature in comparison
+  #     to one another. 
+  #     ==> Use this to evaluate differences between courses
+  #       i.e. see how the importance of stats of this course differs from others
+  if(input$co_importance_type == "raw") {
+    r_course <- radar_data$curr_value
+    r_all <- radar_data$avg_value
+  } else { # Scaled
+    r_course <- radar_data$curr_scaled
+    r_all    <- radar_data$avg_scaled
+  }
+  
+  # Dynamic Zoom on View
+  r_all_points <- c(r_course, r_all)
+  r_min <- min(r_all_points, na.rm = TRUE) * 0.95
+  r_max <- max(r_all_points, na.rm = TRUE) * 1.05 
+  
+  r_closed <- c(r_course, r_course[1])
+  r_closedAll <- c(r_all, r_all[1])
+  
+  theta_closed <- c(radar_data$stat_label, radar_data$stat_label[1])
+  course_vals_closed <- c(radar_data$curr_value, radar_data$curr_value[1])
+  stat_labels_closed <- c(radar_data$stat_label, radar_data$stat_label[1])
+  field_vals_closed <- c(radar_data$avg_value, radar_data$avg_value[1])
+  
+  plot_ly(
+    type = 'scatterpolar',
+    fill = 'toself',
+    showlegend = TRUE
+  ) %>% 
+    add_trace(
+      r = r_closedAll,
+      theta = theta_closed,
+      name = 'All',
+      mode = "lines+markers",
+      text = paste0("All: <br>",
+                    stat_labels_closed, ": ", field_vals_closed, "<br>"),
+      hoverinfo = "text",
+      marker = list(color = "#FF6666"),
+      line = list(color = "#FF6666"),
+      fillcolor = "rgba(255, 102, 102, 0.2)",
+      connectgaps = TRUE
+    ) %>%
+    add_trace(
+      r = r_closed,
+      theta = theta_closed,
+      name = input$co_course,
+      mode = "lines+markers",
+      text = paste0(input$co_course, ": <br>",
+                    stat_labels_closed,": ", course_vals_closed, "<br>"),
+      hoverinfo = "text",
+      marker = list(color = "navy"),
+      line = list(color = "navy"),
+      fillcolor = "rgba(0, 0, 128, 0.3)",
+      connectgaps = TRUE
+    ) %>%
+    layout(
+      polar = list(
+        radialaxis = list(
+          visible = TRUE,
+          range = c(r_min, r_max),
+          showline = FALSE,
+          showticklabels = FALSE
+        ),
+        angularaxis = list(
+          tickfont = list(size = 9)
+        )
+      ),
+      margin = list(l = 0, r = 0, t = 30, b = 60),
+      width = 300,
+      height = 250,
+      showlegend = FALSE
+    ) %>%
+    config(displayModeBar = FALSE)
 }
 
 
