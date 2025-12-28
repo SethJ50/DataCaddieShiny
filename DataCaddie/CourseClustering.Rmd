@@ -102,20 +102,72 @@ cluster_N <- recombine_data %>%
 
 View(cluster_N)
 ```
+
+
+
+
+
+
 # Driver Strategy
+
+### Load Libraries
+```{r}
+library(dplyr)
+library(ggplot2)
+library(factoextra)
+library(corrplot)
+```
+
+### Load Data from DB
+```{r}
+source("uploadUtils/db_connection.R")
+course_diff_conn <- get_mongo_collection("coursedifficulties")
+course_data <- course_diff_conn$find('{}') %>% 
+  filter(year == "all")
+```
+
+**Driving Stats:**
+- yardage_4_5: Average length of par 4's and 5's
+- adj_driving_distance: Average driving distance ('hit driver rate')
+- adj_sd_distance: Average standard deviation of driving distance (club choice variability)
+- adj_driving_accuracy: Average driving accuracy
+- ott_sg: SG: OTT ease
+- fw_width: Average fairway width
+- fw_diff: Missed fairway penalty - Average difference in hole score between fairway and non-fairway drives on par 4s and 5s
+- rgh_diff: Rough penalty - Difference in average strokes to hole out from the rough versus the fairway.
+- non_rgh_diff: Non-rough penalty - Difference in average strokes to hole out from non-rough locations (e.g. bunkers) versus the fairway.
+
+### Correlation Analysis
+```{r}
+possible_cols <- c('yardage_4_5', 'adj_driving_distance', 'adj_sd_distance',
+                  'adj_driving_accuracy', 'ott_sg', 'fw_width', 'fw_diff', 'rgh_diff',  'non_rgh_diff')
+
+corr_data <- course_data %>% 
+  select(all_of(possible_cols))
+
+# Compute correlation matrix
+corr_matrix <- cor(corr_data, use = "pairwise.complete.obs")
+
+# Plot correlation matrix
+corrplot(corr_matrix, method = "color", type = "upper", 
+         tl.col = "black", tl.srt = 45, addCoef.col = "black", 
+         number.cex = 0.7, col = colorRampPalette(c("blue", "white", "red"))(200))
+```
+
+
 
 ### Cluster Data
 ```{r}
 cluster_cols <- c('yardage_4_5', 'adj_driving_distance', 'adj_sd_distance',
-                  'adj_driving_accuracy', 'ott_sg', 'fw_width', 'fw_diff', 'rgh_diff',  'non_rgh_diff')
+                  'adj_driving_accuracy', 'ott_sg', 'fw_width', 'fw_diff')
 non_cluster <- c('course', 'year')
 course_info_cols <- c('course', 'year')
 
-cluster_data <- data %>% select(cluster_cols) %>% 
+cluster_data <- course_data %>% select(cluster_cols) %>% 
   mutate(across(everything(), ~ tidyr::replace_na(.x, 0)))
 
-course_info <- data %>% 
-  select(course, year)
+course_info <- course_data %>% 
+  select(course)
 ```
 
 ### Elbow Method
@@ -174,18 +226,17 @@ cluster_summaries <- cluster_data %>%
   summarise(across(where(is.numeric), mean, na.rm = TRUE), n = n())
 
 View(cluster_summaries)
-
 ```
 
 ```{r}
 recombine_data <- bind_cols(course_info, cluster_data)
 
-names(recombine_data)
-
 cluster_N <- recombine_data %>%
   filter(cluster == 2) %>%
-  select(c(course_info_cols, cluster_cols))
+  select(c(course, cluster_cols))
 
-View(cluster_N)
+saveRDS(recombine_data, "course_ott_clusters.rds")
+
+View(recombine_data)
 ```
 

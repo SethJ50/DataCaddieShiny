@@ -160,9 +160,44 @@ serverCourseOverview <- function(input, output, session, favorite_players,
     proj_fit_data
   })
   
+  ott_cache <- reactiveValues()
+  
+  ott_data <- reactive({
+    req(input$co_course)
+    
+    if (!is.null(ott_cache[[input$co_course]])) {
+      return(ott_cache[[input$co_course]])
+    }
+    
+    data <- makeCourseOttData(
+      curr_course = input$co_course,
+      playersInTournament = playersInTournament
+    )
+    
+    ott_cache[[input$co_course]] <- data
+    data
+  })
+  
+  ott_data <- reactive({
+    req(input$co_course)
+    
+    # If cache already has this course, just return it
+    if (!is.null(ott_cache[[input$co_course]])) {
+      return(ott_cache[[input$co_course]])
+    }
+    
+    # Otherwise compute and store
+    ott_table_data <- makeCourseOttData(input$co_course, favorite_players, playersInTournament)
+    
+    ott_cache[[input$co_course]] <- ott_table_data
+    ott_table_data
+  })
+  
   # Make Player Tables
-  makePlayerTable(input, output, favorite_players, playersInTournament, input$curr_course, course_fit_data)
+  makePlayerTable(input, output, favorite_players, playersInTournament, input$co_course, course_fit_data, ott_data)
 }
+
+
 
 makeCoRadarPlotData <- function(input, curr_course) {
   
@@ -657,7 +692,7 @@ makeCategoryDropdownTable <- function(table_data) {
   return(table)
 }
 
-makePlayerTable <- function(input, output, favorite_players, playersInTournament, curr_course, course_fit_data) {
+makePlayerTable <- function(input, output, favorite_players, playersInTournament, curr_course, course_fit_data, ott_data) {
   
   output$co_ch_table <- renderReactable({
     req(input$co_course)
@@ -704,8 +739,18 @@ makePlayerTable <- function(input, output, favorite_players, playersInTournament
   
   output$co_ott_perf_tab <- renderUI({
     req(input$co_tables_selected == "OTT Course Perf.")
+    req(input$co_course)
     
+    table_data <- ott_data()
+    req(table_data)
+    View(table_data)
     
+    table_data <- table_data %>%
+      mutate(isFavorite = player %in% favorite_players$names)
+    
+    if(!is.null(table_data)) {
+      makeCourseOttTable(table_data, favorite_players)
+    }
   })
   
   output$co_score_hist_tab <- renderUI({
@@ -1001,6 +1046,115 @@ makeProjFitData <- function(curr_course, favorite_players, playersInTournament) 
   return(result_data)
 }
 
+makeCourseOttData <- function(curr_course, favorite_players, playersInTournament) {
+  
+  req(curr_course)
+  
+  # Make Name Conversions
+  playersInTournamentTourneyNameConv <- nameFanduelToTournament(playersInTournament)
+  playersInTournamentPgaNames <- nameFanduelToPga(playersInTournament)
+  
+  
+  # Function to Calculate the Percentile of a value within a column's data
+  calculatePercentile <- function(value, column_data) {
+    column_data <- column_data[!is.na(column_data)]
+    
+    mean(column_data <= value) * 100
+  }
+  
+  # Load OTT Course Cluster Data
+  ott_clusters <- readRDS("course_ott_clusters.rds")
+  if(is.null(ott_clusters)) return(NULL)
+  
+  curr_course_entry <- ott_clusters %>% 
+    filter(course == curr_course)
+  if(nrow(curr_course_entry) == 0) return(NULL)
+  
+  curr_course_cluster <- curr_course_entry %>% 
+    pull(cluster) %>% 
+    first()
+  
+  courses_in_cluster <- ott_clusters %>% 
+    filter(cluster == curr_course_cluster) %>% 
+    pull(course)
+  
+  # Filter Tournament Data
+  tournament_data <- data %>% 
+    filter(
+      player %in% playersInTournamentTourneyNameConv,
+      Round != "Event",
+      course %in% courses_in_cluster
+    )
+  
+  if(nrow(tournament_data) == 0) return(NULL)
+  
+  table_data <- tournament_data %>% 
+    group_by(player) %>% 
+    summarise(
+      sgOtt = round(mean(sgOtt, na.rm = TRUE), 2),
+      drDist = ifelse(
+        is.nan(mean(drDist, na.rm = TRUE)),
+        NA_real_,
+        round(mean(drDist, na.rm = TRUE), 2)
+      ),
+      drAcc = ifelse(
+        is.nan(mean(drAcc, na.rm = TRUE)),
+        NA_real_,
+        round(mean(drAcc, na.rm = TRUE), 2)
+      ),
+      sgTot = round(mean(sgTot, na.rm = TRUE), 2),
+      numRds = n(),
+      .groups = "drop"
+    )
+  
+  # Append performance baselines, performance over expectation
+  today_date <- format(Sys.Date(), "%m/%d/%y")
+  
+  player_baselines <- table_data %>%
+    distinct(player) %>%
+    rowwise() %>%
+    mutate(
+      last50 = list(getLastNRoundsPriorTo(player, today_date, 50)),
+      sgOtt_l50 = round(mean(last50$sgOtt, na.rm = TRUE), 2),
+      sgTot_l50 = round(mean(last50$sgTot, na.rm = TRUE), 2)
+    ) %>%
+    ungroup() %>%
+    select(player, sgOtt_l50, sgTot_l50)
+  
+  table_data <- table_data %>%
+    left_join(player_baselines, by = "player") %>%
+    mutate(
+      sgOttPerfAbvBase = round(sgOtt - sgOtt_l50, 2),
+      sgTotPerfAbvBase = round(sgTot - sgTot_l50, 2)
+    )
+  
+  table_data <- table_data %>% 
+    mutate(
+      Player = player,
+      sgOtt_perc = round(sapply(sgOtt, calculatePercentile, sgOtt), 1),
+      drDist_perc      = round(sapply(drDist, calculatePercentile, drDist), 1),
+      drAcc_perc       = round(sapply(drAcc,  calculatePercentile, drAcc), 1),
+      sgTot_perc       = round(sapply(sgTot,  calculatePercentile, sgTot), 1),
+      sgOttPerfAbvBase_perc       = round(sapply(sgOttPerfAbvBase,  calculatePercentile, sgOttPerfAbvBase), 1),
+      sgTotPerfAbvBase_perc       = round(sapply(sgTotPerfAbvBase,  calculatePercentile, sgTotPerfAbvBase), 1)
+    )
+  
+  # Mark favorite players
+  favs <- favorite_players$names
+  table_data <- table_data %>% 
+    mutate(
+      isFavorite = player %in% favs
+    )
+  
+  # Create .favorite column to hold star	
+  table_data$.favorite <- NA
+  
+  # Rearrange .favorite to be the first column
+  table_data <- table_data[, c(".favorite", setdiff(names(table_data), ".favorite"))]
+  
+  return(table_data)
+}
+
 makeCourseHistoryTable <- function(output, ch_table_data, favorite_players, year) {
   if(year == "all") {
     table_cols <- list(
@@ -1108,6 +1262,57 @@ makeCourseFitTable <- function(table_data, favorite_players) {
     select(`.favorite`, names(table_cols), isFavorite)
   
   table <- makeBasicTable(table_data, col_defs, "projSgTot", favorite_players, hasFavorites = TRUE,
+                          font_size = 10, row_height = 22)
+  
+  return(table)
+}
+
+makeCourseOttTable <- function(table_data, favorite_players) {
+  table_cols <- list(
+    Player = "Player", 
+    sgOtt = "SG: OTT", drDist = "DR. DIST", drAcc = "DR. ACC", sgTot = "SG: TOT",
+    sgOttPerfAbvBase = "OTT v. L50", sgTotPerfAbvBase = "TOT v. L50", numRds = "Rds"
+  )
+  
+  # Make column defs
+  col_defs <- lapply(names(table_cols), function(col) {
+    norm_col <- paste0(col, "_perc")
+    
+    if (norm_col %in% names(table_data)) {
+      norm_data <- table_data[[norm_col]]
+      col_func <- makeColorFunc(min_val = 0, max_val = 100)
+    } else {
+      norm_data <- NULL
+      col_func <- NULL
+    }
+    
+    col_inner <- table_cols[[col]]
+    
+    width <- case_when(
+      col_inner %in% c("Player") ~ 150,
+      col_inner %in% c("OTT v. L50", "TOT v. L50") ~ 90,
+      col_inner == "Rds" ~ 35,
+      TRUE ~ 60
+    )
+    
+    makeColDef(
+      col_name = col,
+      display_name = table_cols[[col]],
+      width = width,
+      color_func = col_func,
+      norm_data = norm_data,
+      header_size = 10
+    )
+  })
+  
+  names(col_defs) <- names(table_cols)
+  
+  col_defs[["isFavorite"]] <- colDef(show = FALSE)
+  
+  table_data <- table_data %>% 
+    select(`.favorite`, names(table_cols), isFavorite)
+  
+  table <- makeBasicTable(table_data, col_defs, "sgOttPerfAbvBase", favorite_players, hasFavorites = TRUE,
                           font_size = 10, row_height = 22)
   
   return(table)
