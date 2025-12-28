@@ -330,6 +330,113 @@ makeCoRadarPlotData <- function(input, curr_course) {
     
     
     return(radar_data)
+  } else if(input$co_fit_viz == "OTT Strategy") {
+    # 	| stat | curr_value | curr_scaled | cluster_value | cluster_scaled | avg_value | avg_scaled |
+    
+    # Load OTT Course Cluster Data
+    ott_clusters <- readRDS("course_ott_clusters.rds")
+    if(is.null(ott_clusters)) return(NULL)
+    
+    curr_course_entry <- ott_clusters %>% 
+      filter(course == curr_course)
+    if(nrow(curr_course_entry) == 0) return(NULL)
+    
+    curr_course_cluster <- curr_course_entry %>% 
+      pull(cluster) %>% 
+      first()
+    
+    courses_in_cluster <- ott_clusters %>% 
+      filter(cluster == curr_course_cluster) %>% 
+      pull(course)
+    
+    # Stats to use
+    ott_stats <- c(
+      "yardage_4_5",
+      "adj_driving_distance",
+      "adj_sd_distance",
+      "adj_driving_accuracy",
+      "ott_sg",
+      "fw_width",
+      "fw_diff"
+    )
+    
+    # ----- Long Form Data -----
+    
+    # Get Current Course Statistics
+    curr_course_stats <- curr_course_entry %>% 
+      select(all_of(ott_stats)) %>% 
+      pivot_longer(
+        everything(),
+        names_to = "stat",
+        values_to = "curr_value"
+      )
+    
+    # Get Average Statistics for Course Cluster
+    curr_cluster_stats <- ott_clusters %>% 
+      filter(cluster == curr_course_cluster) %>%
+      summarise(across(all_of(ott_stats), mean, na.rm = TRUE)) %>%
+      pivot_longer(
+        everything(),
+        names_to = "stat",
+        values_to = "cluster_value"
+      )
+    
+    # Get Average Statistics Overall
+    all_stats <- ott_clusters %>% 
+      summarise(across(all_of(ott_stats), mean, na.rm = TRUE)) %>%
+      pivot_longer(
+        everything(),
+        names_to = "stat",
+        values_to = "avg_value"
+      )
+  
+    # Global mean & sd for scaling
+    global_stats <- ott_clusters %>%
+      pivot_longer(
+        cols = all_of(ott_stats),
+        names_to = "stat",
+        values_to = "value"
+      ) %>%
+      group_by(stat) %>%
+      summarise(
+        mean_val = mean(value, na.rm = TRUE),
+        sd_val   = sd(value, na.rm = TRUE),
+        .groups = "drop"
+      )
+    
+    # Create Pretty Stat Labels
+    pretty_stat_labels <- c(
+      yardage_4_5 = "Par 4/5 Len",
+      adj_driving_distance  = "Avg Dr. Dist",
+      adj_sd_distance  = "Dr. Dist Var.",
+      adj_driving_accuracy = "Avg. Dr. Acc",
+      ott_sg  = "SG:OTT Ease",
+      fw_width  = "Avg. FW Width",
+      fw_diff  = "Miss FW Penalty"
+    )
+    
+    # Final Radar DataFrame
+    radar_data <- curr_course_stats %>%
+      left_join(curr_cluster_stats, by = "stat") %>%
+      left_join(all_stats, by = "stat") %>%
+      left_join(global_stats, by = "stat") %>%
+      mutate(
+        curr_scaled    = ifelse(sd_val == 0, 0, (curr_value - mean_val) / sd_val),
+        cluster_scaled = ifelse(sd_val == 0, 0, (cluster_value - mean_val) / sd_val),
+        avg_scaled     = ifelse(sd_val == 0, 0, (avg_value - mean_val) / sd_val)
+      ) %>%
+      transmute(
+        stat,
+        stat_label = pretty_stat_labels[stat] %||% stat,
+        curr_value,
+        curr_scaled,
+        cluster_value = round(cluster_value, 3),
+        cluster_scaled,
+        avg_value,
+        avg_scaled
+      )
+    
+    return(radar_data)
   } else {
     return(NULL)
   }
@@ -342,97 +449,194 @@ makeCoRadarPlot <- function(input, output, curr_course) {
   
   # Create list of points around plot
   #   'closed' by adding first point again to end to close circle
-  
-  # Establish Plotting of Raw vs. Scaled
-  #   Raw: Shows absolute predictive power of each feature, exhibiting,
-  #     for example, that approach is more predictive than putting on all
-  #     courses.
-  #     ==> Use this to develop predictive models for the course, taking into
-  #     account predictive power of each feature
-  #   Scaled: Z-Score Normalizes each feature and plots current courses
-  #     value as number of standard deviations above or below average. Shows
-  #     more clearly the differences in importance of features across courses,
-  #     but doesn't show the absolute importance of the feature in comparison
-  #     to one another. 
-  #     ==> Use this to evaluate differences between courses
-  #       i.e. see how the importance of stats of this course differs from others
-  if(input$co_importance_type == "raw") {
-    r_course <- radar_data$curr_value
-    r_all <- radar_data$avg_value
-  } else { # Scaled
+  if(input$co_fit_viz == "Basic Stats") {
+    # Establish Plotting of Raw vs. Scaled
+    #   Raw: Shows absolute predictive power of each feature, exhibiting,
+    #     for example, that approach is more predictive than putting on all
+    #     courses.
+    #     ==> Use this to develop predictive models for the course, taking into
+    #     account predictive power of each feature
+    #   Scaled: Z-Score Normalizes each feature and plots current courses
+    #     value as number of standard deviations above or below average. Shows
+    #     more clearly the differences in importance of features across courses,
+    #     but doesn't show the absolute importance of the feature in comparison
+    #     to one another. 
+    #     ==> Use this to evaluate differences between courses
+    #       i.e. see how the importance of stats of this course differs from others
+    if(input$co_importance_type == "raw") {
+      r_course <- radar_data$curr_value
+      r_all <- radar_data$avg_value
+    } else { # Scaled
+      r_course <- radar_data$curr_scaled
+      r_all    <- radar_data$avg_scaled
+    }
+    
+    # Dynamic Zoom on View
+    r_all_points <- c(r_course, r_all)
+    
+    r_min_raw <- min(r_all_points, na.rm = TRUE)
+    r_max_raw <- max(r_all_points, na.rm = TRUE)
+    
+    range_width <- r_max_raw - r_min_raw
+    pad <- 0.05 * range_width  # 5% padding
+    
+    r_min <- r_min_raw - pad
+    r_max <- r_max_raw + pad
+    
+    r_closed <- c(r_course, r_course[1])
+    r_closedAll <- c(r_all, r_all[1])
+    
+    theta_closed <- c(radar_data$stat_label, radar_data$stat_label[1])
+    course_vals_closed <- c(radar_data$curr_value, radar_data$curr_value[1])
+    stat_labels_closed <- c(radar_data$stat_label, radar_data$stat_label[1])
+    field_vals_closed <- c(radar_data$avg_value, radar_data$avg_value[1])
+    
+    plot_ly(
+      type = 'scatterpolar',
+      fill = 'toself',
+      showlegend = TRUE
+    ) %>% 
+      add_trace(
+        r = r_closedAll,
+        theta = theta_closed,
+        name = 'All',
+        mode = "lines+markers",
+        text = paste0("All: <br>",
+                      stat_labels_closed, ": ", field_vals_closed, "<br>"),
+        hoverinfo = "text",
+        marker = list(color = "#FF6666"),
+        line = list(color = "#FF6666"),
+        fillcolor = "rgba(255, 102, 102, 0.2)",
+        connectgaps = TRUE
+      ) %>%
+      add_trace(
+        r = r_closed,
+        theta = theta_closed,
+        name = input$co_course,
+        mode = "lines+markers",
+        text = paste0(input$co_course, ": <br>",
+                      stat_labels_closed,": ", course_vals_closed, "<br>"),
+        hoverinfo = "text",
+        marker = list(color = "navy"),
+        line = list(color = "navy"),
+        fillcolor = "rgba(0, 0, 128, 0.3)",
+        connectgaps = TRUE
+      ) %>%
+      layout(
+        polar = list(
+          radialaxis = list(
+            visible = TRUE,
+            range = c(r_min, r_max),
+            showline = FALSE,
+            showticklabels = FALSE
+          ),
+          angularaxis = list(
+            tickfont = list(size = 9)
+          )
+        ),
+        margin = list(l = 0, r = 0, t = 30, b = 60),
+        width = 300,
+        height = 250,
+        showlegend = FALSE
+      ) %>%
+      config(displayModeBar = FALSE)
+  } else if(input$co_fit_viz == "OTT Strategy") {
+    
+    # Set stat for radar radius value
     r_course <- radar_data$curr_scaled
-    r_all    <- radar_data$avg_scaled
+    r_cluster <- radar_data$cluster_scaled
+    r_all <- radar_data$avg_scaled
+    
+    # Dynamic Zoom on View
+    r_all_points <- c(r_course, r_cluster, r_all)
+    
+    r_min_raw <- min(r_all_points, na.rm = TRUE)
+    r_max_raw <- max(r_all_points, na.rm = TRUE)
+    
+    range_width <- r_max_raw - r_min_raw
+    pad <- 0.05 * range_width  # 5% padding
+    
+    r_min <- r_min_raw - pad
+    r_max <- r_max_raw + pad
+    
+    # Create Closed Statistic Lists
+    r_closed <- c(r_course, r_course[1])
+    r_closedCluster <- c(r_cluster, r_cluster[1])
+    r_closedAll <- c(r_all, r_all[1])
+    theta_closed <- c(radar_data$stat_label, radar_data$stat_label[1])
+    stat_labels_closed <- c(radar_data$stat_label, radar_data$stat_label[1])
+    course_vals_closed <- c(radar_data$curr_value, radar_data$curr_value[1])
+    cluster_vals_closed <- c(radar_data$cluster_value, radar_data$cluster_value[1])
+    field_vals_closed <- c(radar_data$avg_value, radar_data$avg_value[1])
+    
+    plot_ly(
+      type = 'scatterpolar',
+      fill = 'toself',
+      showlegend = TRUE
+    ) %>% 
+      add_trace(
+        r = r_closedAll,
+        theta = theta_closed,
+        name = 'All',
+        mode = "lines+markers",
+        text = paste0("All: <br>",
+                      stat_labels_closed, ": ", field_vals_closed, "<br>"),
+        hoverinfo = "text",
+        marker = list(color = "#FF6666"),
+        line = list(color = "#FF6666"),
+        fillcolor = "rgba(255, 102, 102, 0.2)",
+        connectgaps = TRUE
+      ) %>%
+      add_trace(
+        r = r_closedCluster,
+        theta = theta_closed,
+        name = 'All',
+        mode = "lines+markers",
+        text = paste0("All: <br>",
+                      stat_labels_closed, ": ", cluster_vals_closed, "<br>"),
+        hoverinfo = "text",
+        marker = list(color = "#90EE90"),
+        line = list(color = "#90EE90"),
+        fillcolor = "rgba(144, 238, 144, 0.30)",
+        connectgaps = TRUE
+      ) %>%
+      add_trace(
+        r = r_closed,
+        theta = theta_closed,
+        name = input$co_course,
+        mode = "lines+markers",
+        text = paste0(input$co_course, ": <br>",
+                      stat_labels_closed,": ", course_vals_closed, "<br>"),
+        hoverinfo = "text",
+        marker = list(color = "navy"),
+        line = list(color = "navy"),
+        fillcolor = "rgba(0, 0, 128, 0.3)",
+        connectgaps = TRUE
+      ) %>%
+      layout(
+        polar = list(
+          radialaxis = list(
+            visible = TRUE,
+            range = c(r_min, r_max),
+            showline = FALSE,
+            showticklabels = FALSE
+          ),
+          angularaxis = list(
+            tickfont = list(size = 9)
+          )
+        ),
+        margin = list(l = 0, r = 0, t = 30, b = 60),
+        width = 300,
+        height = 250,
+        showlegend = FALSE
+      ) %>%
+      config(displayModeBar = FALSE)
+    
+  } else {
+    return(NULL)
   }
   
-  # Dynamic Zoom on View
-  r_all_points <- c(r_course, r_all)
-  
-  r_min_raw <- min(r_all_points, na.rm = TRUE)
-  r_max_raw <- max(r_all_points, na.rm = TRUE)
-  
-  range_width <- r_max_raw - r_min_raw
-  pad <- 0.05 * range_width  # 5% padding
-  
-  r_min <- r_min_raw - pad
-  r_max <- r_max_raw + pad
-  
-  r_closed <- c(r_course, r_course[1])
-  r_closedAll <- c(r_all, r_all[1])
-  
-  theta_closed <- c(radar_data$stat_label, radar_data$stat_label[1])
-  course_vals_closed <- c(radar_data$curr_value, radar_data$curr_value[1])
-  stat_labels_closed <- c(radar_data$stat_label, radar_data$stat_label[1])
-  field_vals_closed <- c(radar_data$avg_value, radar_data$avg_value[1])
-  
-  plot_ly(
-    type = 'scatterpolar',
-    fill = 'toself',
-    showlegend = TRUE
-  ) %>% 
-    add_trace(
-      r = r_closedAll,
-      theta = theta_closed,
-      name = 'All',
-      mode = "lines+markers",
-      text = paste0("All: <br>",
-                    stat_labels_closed, ": ", field_vals_closed, "<br>"),
-      hoverinfo = "text",
-      marker = list(color = "#FF6666"),
-      line = list(color = "#FF6666"),
-      fillcolor = "rgba(255, 102, 102, 0.2)",
-      connectgaps = TRUE
-    ) %>%
-    add_trace(
-      r = r_closed,
-      theta = theta_closed,
-      name = input$co_course,
-      mode = "lines+markers",
-      text = paste0(input$co_course, ": <br>",
-                    stat_labels_closed,": ", course_vals_closed, "<br>"),
-      hoverinfo = "text",
-      marker = list(color = "navy"),
-      line = list(color = "navy"),
-      fillcolor = "rgba(0, 0, 128, 0.3)",
-      connectgaps = TRUE
-    ) %>%
-    layout(
-      polar = list(
-        radialaxis = list(
-          visible = TRUE,
-          range = c(r_min, r_max),
-          showline = FALSE,
-          showticklabels = FALSE
-        ),
-        angularaxis = list(
-          tickfont = list(size = 9)
-        )
-      ),
-      margin = list(l = 0, r = 0, t = 30, b = 60),
-      width = 300,
-      height = 250,
-      showlegend = FALSE
-    ) %>%
-    config(displayModeBar = FALSE)
+ 
 }
 
 

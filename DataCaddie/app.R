@@ -469,7 +469,7 @@ ui <- tagList(
                  shinyWidgets::pickerInput(
                    inputId = "co_fit_viz",
                    label = "Course Fit Visualization:",
-                   choices = c("Basic Stats","Course Attributes", "OTT Strategy"),
+                   choices = c("Basic Stats", "Course Attributes", "OTT Strategy"),
                    selected = "Basic Stats",
                    width = "100%"
                  ),
