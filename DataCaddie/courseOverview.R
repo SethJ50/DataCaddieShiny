@@ -274,33 +274,33 @@ makeCoRadarPlotData <- function(input, curr_course) {
     )
     
     # Current Course Data Values
-    curr_course_data <- importance_all %>%
+    curr_course_data <- shap_all_courses %>%
       filter(course == curr_course) %>%
-      select(stat, curr_value = importance)
+      select(stat, curr_value = shap_value)
     
     # Average Course Values
-    avg_course_data <- importance_all %>%
+    avg_course_data <- shap_all_courses %>%
       group_by(stat) %>%
       summarise(
-        avg_value = mean(importance, na.rm = TRUE),
+        avg_value = mean(shap_value, na.rm = TRUE),
         .groups = "drop"
       )
     
     # Determine Min, Max ranges for each model stat
-    norm_ranges <- importance_all %>%
+    norm_ranges <- shap_all_courses %>%
       group_by(stat) %>%
       summarise(
-        min_val = min(importance, na.rm = TRUE),
-        max_val = max(importance, na.rm = TRUE),
+        min_val = min(shap_value, na.rm = TRUE),
+        max_val = max(shap_value, na.rm = TRUE),
         .groups = "drop"
       )
     
     # Determine mean and sd for each feature
-    stats_ranges <- importance_all %>%
+    stats_ranges <- shap_all_courses %>%
       group_by(stat) %>%
       summarise(
-        mean_val = mean(importance, na.rm = TRUE),
-        sd_val   = sd(importance, na.rm = TRUE),
+        mean_val = mean(shap_value, na.rm = TRUE),
+        sd_val   = sd(shap_value, na.rm = TRUE),
         .groups = "drop"
       )
     
@@ -322,10 +322,10 @@ makeCoRadarPlotData <- function(input, curr_course) {
       transmute(
         stat,
         stat_label = pretty_stat_labels[stat] %||% stat,
-        curr_value  = round(curr_value, 3),
-        curr_scaled = round(curr_scaled, 2),
-        avg_value   = round(avg_value, 3),
-        avg_scaled  = round(avg_scaled, 2)
+        curr_value  = round(curr_value, 4),
+        curr_scaled = round(curr_scaled, 4),
+        avg_value   = round(avg_value, 4),
+        avg_scaled  = round(avg_scaled, 4)
       )
     
     
@@ -366,8 +366,15 @@ makeCoRadarPlot <- function(input, output, curr_course) {
   
   # Dynamic Zoom on View
   r_all_points <- c(r_course, r_all)
-  r_min <- min(r_all_points, na.rm = TRUE) * 0.95
-  r_max <- max(r_all_points, na.rm = TRUE) * 1.05 
+  
+  r_min_raw <- min(r_all_points, na.rm = TRUE)
+  r_max_raw <- max(r_all_points, na.rm = TRUE)
+  
+  range_width <- r_max_raw - r_min_raw
+  pad <- 0.05 * range_width  # 5% padding
+  
+  r_min <- r_min_raw - pad
+  r_max <- r_max_raw + pad
   
   r_closed <- c(r_course, r_course[1])
   r_closedAll <- c(r_all, r_all[1])
@@ -743,7 +750,6 @@ makePlayerTable <- function(input, output, favorite_players, playersInTournament
     
     table_data <- ott_data()
     req(table_data)
-    View(table_data)
     
     table_data <- table_data %>%
       mutate(isFavorite = player %in% favorite_players$names)

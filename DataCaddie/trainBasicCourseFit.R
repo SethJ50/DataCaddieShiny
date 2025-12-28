@@ -12,6 +12,7 @@ trainCourseFitModels <- function() {
   
   courses <- unique(courseStatsData$course)
   #courses <- c("Augusta National Golf Club")
+  #courses <- c("Quail Hollow Club")
   
   for (curr_course in courses) {
     message("Training model for: ", curr_course)
@@ -50,6 +51,8 @@ trainCourseFitModels <- function() {
     
     training_df <- bind_rows(rows_list)
     
+    print(paste0("Number of Training Items: ", nrow(training_df)))
+    
     if (nrow(training_df) < 20) next
     
     # Train xgboost model ~ sg_tot
@@ -82,6 +85,8 @@ trainCourseFitModels <- function() {
     )
     
     # Compute SHAP values for this course
+    #   SHAP values describe, in SG, how much each stat pushed the prediction
+    #   up or down compared to an average player
     shap_values <- shap.values(xgb_model = model, X_train = X)
     
     #   rfvalue: raw feature value, stdfvalue: standardized feature value
@@ -95,11 +100,40 @@ trainCourseFitModels <- function() {
     #   player
     shap_agg <- shap_long %>%
       group_by(variable) %>%
-      summarise(mean_abs_shap = mean(abs(value))) %>%
-      arrange(desc(mean_abs_shap)) %>% 
+      summarise(
+        mean_abs_shap = mean(abs(value)),
+        mean_shap = mean(value)
+      )
+    
+    vars <- shap_agg$variable
+    
+    # Compute directional importance
+    direction <- sapply(vars, function(v) {
+      cor(training_df[[v]], training_df$sg_tot, use = "complete.obs")
+    })
+    
+    shap_agg <- shap_agg %>%
+      mutate(
+        direction = direction,
+        directional_importance = mean_abs_shap * sign(direction),
+        dir_rel = directional_importance / max(abs(directional_importance), na.rm = TRUE),
+        mean_abs_shap_rel = mean_abs_shap / sum(mean_abs_shap, na.rm = TRUE)
+      )
+      
+    shap_agg_mean <- shap_agg %>% 
+      select(variable, mean_abs_shap_rel) %>% 
+      arrange(desc(mean_abs_shap_rel)) %>% 
       pivot_wider(
         names_from = variable,
-        values_from = mean_abs_shap
+        values_from = mean_abs_shap_rel
+      )
+    
+    dir_rel <- shap_agg %>% 
+      select(variable, dir_rel) %>% 
+      arrange(desc(dir_rel)) %>% 
+      pivot_wider(
+        names_from = variable,
+        values_from = dir_rel
       )
     
     # Save model, features, SHAP info, and aggregated SHAP importance
@@ -108,7 +142,8 @@ trainCourseFitModels <- function() {
       features = colnames(X),
       shap_values = shap_values,
       shap_long = shap_long,
-      shap_agg = shap_agg
+      shap_agg = shap_agg_mean,
+      dir_rel = dir_rel
     )
   }
   
