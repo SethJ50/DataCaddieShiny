@@ -165,22 +165,6 @@ serverCourseOverview <- function(input, output, session, favorite_players,
   ott_data <- reactive({
     req(input$co_course)
     
-    if (!is.null(ott_cache[[input$co_course]])) {
-      return(ott_cache[[input$co_course]])
-    }
-    
-    data <- makeCourseOttData(
-      curr_course = input$co_course,
-      playersInTournament = playersInTournament
-    )
-    
-    ott_cache[[input$co_course]] <- data
-    data
-  })
-  
-  ott_data <- reactive({
-    req(input$co_course)
-    
     # If cache already has this course, just return it
     if (!is.null(ott_cache[[input$co_course]])) {
       return(ott_cache[[input$co_course]])
@@ -193,8 +177,25 @@ serverCourseOverview <- function(input, output, session, favorite_players,
     ott_table_data
   })
   
+  ovr_course_cache <- reactiveValues()
+  
+  ovr_course_data <- reactive({
+    req(input$co_course)
+    
+    # If cache already has this course, just return it
+    if (!is.null(ovr_course_cache[[input$co_course]])) {
+      return(ovr_course_cache[[input$co_course]])
+    }
+    
+    # Otherwise compute and store
+    ovr_course_table_data <- makeCourseOvrData(input$co_course, favorite_players, playersInTournament)
+    
+    ovr_course_cache[[input$co_course]] <- ovr_course_table_data
+    ovr_course_table_data
+  })
+  
   # Make Player Tables
-  makePlayerTable(input, output, favorite_players, playersInTournament, input$co_course, course_fit_data, ott_data)
+  makePlayerTable(input, output, favorite_players, playersInTournament, input$co_course, course_fit_data, ott_data, ovr_course_data)
 }
 
 
@@ -903,7 +904,7 @@ makeCategoryDropdownTable <- function(table_data) {
   return(table)
 }
 
-makePlayerTable <- function(input, output, favorite_players, playersInTournament, curr_course, course_fit_data, ott_data) {
+makePlayerTable <- function(input, output, favorite_players, playersInTournament, curr_course, course_fit_data, ott_data, ovr_course_data) {
   
   output$co_ch_table <- renderReactable({
     req(input$co_course)
@@ -944,8 +945,17 @@ makePlayerTable <- function(input, output, favorite_players, playersInTournament
   
   output$co_sim_course_tab <- renderUI({
     req(input$co_tables_selected == "Similar Course Perf.")
+    req(input$co_course)
     
+    table_data <- ovr_course_data()
+    req(table_data)
     
+    table_data <- table_data %>%
+      mutate(isFavorite = player %in% favorite_players$names)
+    
+    if(!is.null(table_data)) {
+      makeCourseOvrTable(table_data, favorite_players)
+    }
   })
   
   output$co_ott_perf_tab <- renderUI({
@@ -1365,6 +1375,118 @@ makeCourseOttData <- function(curr_course, favorite_players, playersInTournament
   return(table_data)
 }
 
+makeCourseOvrData <- function(curr_course, favorite_players, playersInTournament) {
+  
+  req(curr_course)
+  
+  # Make Name Conversions
+  playersInTournamentTourneyNameConv <- nameFanduelToTournament(playersInTournament)
+  playersInTournamentPgaNames <- nameFanduelToPga(playersInTournament)
+  
+  
+  # Function to Calculate the Percentile of a value within a column's data
+  calculatePercentile <- function(value, column_data) {
+    column_data <- column_data[!is.na(column_data)]
+    
+    mean(column_data <= value) * 100
+  }
+  
+  # Load OVR Course Cluster Data
+  ovr_clusters <- readRDS("course_ovr_clusters.rds")
+  if(is.null(ovr_clusters)) return(NULL)
+  
+  curr_course_entry <- ovr_clusters %>% 
+    filter(course == curr_course)
+  if(nrow(curr_course_entry) == 0) return(NULL)
+  
+  curr_course_cluster <- curr_course_entry %>% 
+    pull(cluster) %>% 
+    first()
+  
+  courses_in_cluster <- ovr_clusters %>% 
+    filter(cluster == curr_course_cluster) %>% 
+    pull(course)
+  
+  # Filter Tournament Data
+  tournament_data <- data %>% 
+    filter(
+      player %in% playersInTournamentTourneyNameConv,
+      Round != "Event",
+      course %in% courses_in_cluster
+    )
+  
+  if(nrow(tournament_data) == 0) return(NULL)
+  
+  table_data <- tournament_data %>% 
+    group_by(player) %>% 
+    summarise(
+      sgPutt = round(mean(sgPutt, na.rm = TRUE), 2),
+      sgArg = round(mean(sgArg, na.rm = TRUE), 2),
+      sgApp = round(mean(sgApp, na.rm = TRUE), 2),
+      sgOtt = round(mean(sgOtt, na.rm = TRUE), 2),
+      drDist = ifelse(
+        is.nan(mean(drDist, na.rm = TRUE)),
+        NA_real_,
+        round(mean(drDist, na.rm = TRUE), 2)
+      ),
+      drAcc = ifelse(
+        is.nan(mean(drAcc, na.rm = TRUE)),
+        NA_real_,
+        round(mean(drAcc, na.rm = TRUE), 2)
+      ),
+      sgTot = round(mean(sgTot, na.rm = TRUE), 2),
+      numRds = n(),
+      .groups = "drop"
+    )
+  
+  # Append performance baselines, performance over expectation
+  today_date <- format(Sys.Date(), "%m/%d/%y")
+  
+  player_baselines <- table_data %>%
+    distinct(player) %>%
+    rowwise() %>%
+    mutate(
+      last50 = list(getLastNRoundsPriorTo(player, today_date, 50)),
+      sgTot_l50 = round(mean(last50$sgTot, na.rm = TRUE), 2)
+    ) %>%
+    ungroup() %>%
+    select(player, sgTot_l50)
+  
+  table_data <- table_data %>%
+    left_join(player_baselines, by = "player") %>%
+    mutate(
+      sgTotPerfAbvBase = round(sgTot - sgTot_l50, 2)
+    )
+  
+  table_data <- table_data %>% 
+    mutate(
+      Player = player,
+      sgPutt_perc = round(sapply(sgPutt, calculatePercentile, sgPutt), 1),
+      sgArg_perc = round(sapply(sgArg, calculatePercentile, sgArg), 1),
+      sgApp_perc = round(sapply(sgApp, calculatePercentile, sgApp), 1),
+      sgOtt_perc = round(sapply(sgOtt, calculatePercentile, sgOtt), 1),
+      drDist_perc      = round(sapply(drDist, calculatePercentile, drDist), 1),
+      drAcc_perc       = round(sapply(drAcc,  calculatePercentile, drAcc), 1),
+      sgTot_perc       = round(sapply(sgTot,  calculatePercentile, sgTot), 1),
+      sgTotPerfAbvBase_perc       = round(sapply(sgTotPerfAbvBase,  calculatePercentile, sgTotPerfAbvBase), 1)
+    )
+  
+  # Mark favorite players
+  favs <- favorite_players$names
+  table_data <- table_data %>% 
+    mutate(
+      isFavorite = player %in% favs
+    )
+  
+  # Create .favorite column to hold star	
+  table_data$.favorite <- NA
+  
+  # Rearrange .favorite to be the first column
+  table_data <- table_data[, c(".favorite", setdiff(names(table_data), ".favorite"))]
+  
+  return(table_data)
+}
+
 makeCourseHistoryTable <- function(output, ch_table_data, favorite_players, year) {
   if(year == "all") {
     table_cols <- list(
@@ -1523,6 +1645,57 @@ makeCourseOttTable <- function(table_data, favorite_players) {
     select(`.favorite`, names(table_cols), isFavorite)
   
   table <- makeBasicTable(table_data, col_defs, "sgOttPerfAbvBase", favorite_players, hasFavorites = TRUE,
+                          font_size = 10, row_height = 22)
+  
+  return(table)
+}
+
+makeCourseOvrTable <- function(table_data, favorite_players) {
+  table_cols <- list(
+    Player = "Player", 
+    sgPutt = "SG: PUTT", sgArg = "SG: ARG", sgApp = "SG: APP", sgOtt = "SG: OTT",
+    drDist = "DR. DIST", drAcc = "DR. ACC", sgTot = "SG: TOT", sgTotPerfAbvBase = "TOT v. L50", numRds = "Rds"
+  )
+  
+  # Make column defs
+  col_defs <- lapply(names(table_cols), function(col) {
+    norm_col <- paste0(col, "_perc")
+    
+    if (norm_col %in% names(table_data)) {
+      norm_data <- table_data[[norm_col]]
+      col_func <- makeColorFunc(min_val = 0, max_val = 100)
+    } else {
+      norm_data <- NULL
+      col_func <- NULL
+    }
+    
+    col_inner <- table_cols[[col]]
+    
+    width <- case_when(
+      col_inner %in% c("Player") ~ 150,
+      col_inner %in% c("TOT v. L50") ~ 90,
+      col_inner == "Rds" ~ 35,
+      TRUE ~ 60
+    )
+    
+    makeColDef(
+      col_name = col,
+      display_name = table_cols[[col]],
+      width = width,
+      color_func = col_func,
+      norm_data = norm_data,
+      header_size = 10
+    )
+  })
+  
+  names(col_defs) <- names(table_cols)
+  
+  col_defs[["isFavorite"]] <- colDef(show = FALSE)
+  
+  table_data <- table_data %>% 
+    select(`.favorite`, names(table_cols), isFavorite)
+  
+  table <- makeBasicTable(table_data, col_defs, "sgTotPerfAbvBase", favorite_players, hasFavorites = TRUE,
                           font_size = 10, row_height = 22)
   
   return(table)
