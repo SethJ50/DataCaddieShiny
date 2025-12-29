@@ -522,6 +522,9 @@ ui <- tagList(
                  div(
                    style = "width: 100%, max-width: 350px; margin-left: auto; margin-right: auto; text-align: center;",
                    plotlyOutput("co_stat_radar", height = "250px", width = "100%")
+                 ),
+                 div(
+                   plotlyOutput("course_sim_plot", height = "300px")
                  )
                ),
                card(

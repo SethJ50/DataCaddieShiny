@@ -10,6 +10,8 @@ library(ggrepel)
 library(plotly)
 library(showtext)
 library(shinycssloaders)
+library(scales)
+library(tidyr)
 
 source("utils.R")
 source("playersDataFunctions.R")
@@ -212,7 +214,7 @@ serverCourseOverview <- function(input, output, session, favorite_players,
 
 
 
-makeCoRadarPlotData <- function(input, curr_course) {
+makeCoRadarPlotData <- function(input, curr_course, output) {
   
   req(curr_course)
   req(input$co_fit_viz)
@@ -260,6 +262,18 @@ makeCoRadarPlotData <- function(input, curr_course) {
           )
       }
     )
+    
+    # Make Data For Similar Courses Plot
+    shap_all_wide <- shap_all_courses %>% 
+      pivot_wider(
+        names_from = stat,
+        values_from = shap_value
+      )
+    
+    # Update Course Similarity Plot
+    output$course_sim_plot <- renderPlotly({
+      plotNearestCourses(course_data = shap_all_wide, curr_course = curr_course)
+    })
     
     # Collect Model Importance for all courses
     importance_all <- purrr::map_dfr(
@@ -361,6 +375,15 @@ makeCoRadarPlotData <- function(input, curr_course) {
     courses_in_cluster <- ott_clusters %>% 
       filter(cluster == curr_course_cluster) %>% 
       pull(course)
+    
+    # Create Data for Similarity Plot
+    sim_data <- ott_clusters %>% 
+      select(-cluster)
+    
+    # Update Course Similarity Plot
+    output$course_sim_plot <- renderPlotly({
+      plotNearestCourses(course_data = sim_data, curr_course = curr_course)
+    })
     
     # Stats to use
     ott_stats <- c(
@@ -469,6 +492,15 @@ makeCoRadarPlotData <- function(input, curr_course) {
       filter(cluster == curr_course_cluster) %>% 
       pull(course)
     
+    # Create Data for Similar Courses
+    sim_data <- ovr_clusters %>% 
+      select(-cluster)
+    
+    # Update Course Similarity Plot
+    output$course_sim_plot <- renderPlotly({
+      plotNearestCourses(course_data = sim_data, curr_course = curr_course)
+    })
+    
     # Stats to use
     ovr_stats <- c(
       "difficulty",
@@ -566,7 +598,7 @@ makeCoRadarPlotData <- function(input, curr_course) {
 
 makeCoRadarPlot <- function(input, output, curr_course) {
   
-  radar_data <- makeCoRadarPlotData(input, curr_course)
+  radar_data <- makeCoRadarPlotData(input, curr_course, output)
   if (is.null(radar_data)) return(NULL)
   
   # Create list of points around plot
@@ -964,6 +996,100 @@ makeCourseStatsTableData <- function(all_data, round_data, curr_course, curr_yea
   )
   
   return(table_data)
+}
+
+plotNearestCourses <- function(course_data, curr_course, n_neighbors = 11) {
+  
+  # --- Validation ---
+  stopifnot("course" %in% names(course_data))
+  stopifnot(curr_course %in% course_data$course)
+  
+  # --- Separate features ---
+  feature_cols <- setdiff(names(course_data), "course")
+  
+  # --- Normalize features (z-score) ---
+  norm_data <- course_data %>%
+    mutate(across(all_of(feature_cols), scale))
+  
+  # --- Extract current course vector ---
+  curr_vec <- norm_data %>%
+    filter(course == curr_course) %>%
+    select(all_of(feature_cols)) %>%
+    as.numeric()
+  
+  # --- Compute Euclidean distance ---
+  dist_df <- norm_data %>%
+    rowwise() %>%
+    mutate(
+      distance = sqrt(sum((c_across(all_of(feature_cols)) - curr_vec)^2))
+    ) %>%
+    ungroup() %>%
+    filter(course != curr_course)
+  
+  # --- Select closest courses ---
+  nearest <- dist_df %>%
+    arrange(distance) %>%
+    slice_head(n = n_neighbors) %>%
+    mutate(
+      similarity = 1 / (1 + distance)
+    )
+  
+  # --- Scale similarity for bar length ---
+  nearest <- nearest %>%
+    mutate(
+      similarity_scaled = scales::rescale(similarity, to = c(0, 1))
+    ) %>%
+    arrange(similarity_scaled) %>%
+    mutate(
+      course = factor(course, levels = course)
+    )
+  
+  # --- Plotly horizontal bar plot ---
+  p <- plotly::plot_ly(
+    data = nearest,
+    x = ~similarity_scaled,
+    y = ~course,
+    type = "bar",
+    orientation = "h",
+    marker = list(
+      color = "#4C78A8",
+      opacity = 0.85
+    ),
+    text = ~course,
+    textposition = "auto",
+    hovertemplate = paste(
+      "<b>%{y}</b><br>",
+      "Similarity: %{customdata:.3f}<extra></extra>"
+    ),
+    customdata = ~similarity
+  ) %>%
+    plotly::layout(
+      title = list(
+        text = paste("Similar Courses"),
+        x = 0,
+        font = list(
+          size = 16
+        )
+      ),
+      xaxis = list(
+        showticklabels = FALSE,
+        showgrid = FALSE,
+        zeroline = FALSE,
+        title = ""
+      ),
+      yaxis = list(
+        showticklabels = FALSE,
+        showgrid = FALSE,
+        title = "",
+        automargin = TRUE
+      ),
+      margin = list(l = 5, r = 40, t = 50, b = 10),
+      bargap = 0.25
+    )
+  
+  p <- p %>% plotly::config(displayModeBar = FALSE)
+  
+  p
 }
 
 makeCategoryDropdownTable <- function(table_data) {
