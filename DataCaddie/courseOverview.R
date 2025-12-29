@@ -155,6 +155,15 @@ serverCourseOverview <- function(input, output, session, favorite_players,
   
   course_fit_cache <- reactiveValues()
   
+  cache_path <- "course_fit_cache.rds"
+  if (file.exists(cache_path)) {
+    cached_data <- readRDS(cache_path)
+    
+    for (nm in names(cached_data)) {
+      course_fit_cache[[nm]] <- cached_data[[nm]]
+    }
+  }
+  
   course_fit_data <- reactive({
     req(input$co_course)
     
@@ -176,6 +185,15 @@ serverCourseOverview <- function(input, output, session, favorite_players,
   
   ott_cache <- reactiveValues()
   
+  cache_path <- "ott_cache.rds"
+  if (file.exists(cache_path)) {
+    cached_data <- readRDS(cache_path)
+    
+    for (nm in names(cached_data)) {
+      ott_cache[[nm]] <- cached_data[[nm]]
+    }
+  }
+  
   ott_data <- reactive({
     req(input$co_course)
     
@@ -192,6 +210,15 @@ serverCourseOverview <- function(input, output, session, favorite_players,
   })
   
   ovr_course_cache <- reactiveValues()
+  
+  cache_path <- "ovr_cache.rds"
+  if (file.exists(cache_path)) {
+    cached_data <- readRDS(cache_path)
+    
+    for (nm in names(cached_data)) {
+      ovr_course_cache[[nm]] <- cached_data[[nm]]
+    }
+  }
   
   ovr_course_data <- reactive({
     req(input$co_course)
