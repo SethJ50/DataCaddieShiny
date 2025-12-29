@@ -438,6 +438,115 @@ makeCoRadarPlotData <- function(input, curr_course) {
       )
     
     return(radar_data)
+  } else if(input$co_fit_viz == "Course Attributes") {
+    # 	| stat | curr_value | curr_scaled | cluster_value | cluster_scaled | avg_value | avg_scaled |
+    
+    # Load OVR Course Cluster Data
+    ovr_clusters <- readRDS("course_ovr_clusters.rds")
+    if(is.null(ovr_clusters)) return(NULL)
+    
+    curr_course_entry <- ovr_clusters %>% 
+      filter(course == curr_course)
+    if(nrow(curr_course_entry) == 0) return(NULL)
+    
+    curr_course_cluster <- curr_course_entry %>% 
+      pull(cluster) %>% 
+      first()
+    
+    courses_in_cluster <- ovr_clusters %>% 
+      filter(cluster == curr_course_cluster) %>% 
+      pull(course)
+    
+    # Stats to use
+    ovr_stats <- c(
+      "difficulty",
+      "yardage_3",
+      "yardage_4_5",
+      "fw_width",
+      "fw_diff",
+      "app_sg",
+      "arg_sg",
+      "putt_sg"
+    )
+    
+    # ----- Long Form Data -----
+    
+    # Get Current Course Statistics
+    curr_course_stats <- curr_course_entry %>% 
+      select(all_of(ovr_stats)) %>% 
+      pivot_longer(
+        everything(),
+        names_to = "stat",
+        values_to = "curr_value"
+      )
+    
+    # Get Average Statistics for Course Cluster
+    curr_cluster_stats <- ovr_clusters %>% 
+      filter(cluster == curr_course_cluster) %>%
+      summarise(across(all_of(ovr_stats), mean, na.rm = TRUE)) %>%
+      pivot_longer(
+        everything(),
+        names_to = "stat",
+        values_to = "cluster_value"
+      )
+    
+    # Get Average Statistics Overall
+    all_stats <- ovr_clusters %>% 
+      summarise(across(all_of(ovr_stats), mean, na.rm = TRUE)) %>%
+      pivot_longer(
+        everything(),
+        names_to = "stat",
+        values_to = "avg_value"
+      )
+    
+    # Global mean & sd for scaling
+    global_stats <- ovr_clusters %>%
+      pivot_longer(
+        cols = all_of(ovr_stats),
+        names_to = "stat",
+        values_to = "value"
+      ) %>%
+      group_by(stat) %>%
+      summarise(
+        mean_val = mean(value, na.rm = TRUE),
+        sd_val   = sd(value, na.rm = TRUE),
+        .groups = "drop"
+      )
+    
+    # Create Pretty Stat Labels
+    pretty_stat_labels <- c(
+      difficulty = "ScoreToPar",
+      yardage_3  = "Par3 Len",
+      yardage_4_5  = "Par4/5 Len",
+      fw_width = "Avg. FW Width",
+      fw_diff  = "Miss FW Penalty",
+      arg_sg  = "SG:ARG Ease",
+      app_sg  = "SG:APP Ease",
+      putt_sg = "SG:PUTT Ease"
+    )
+    
+    # Final Radar DataFrame
+    radar_data <- curr_course_stats %>%
+      left_join(curr_cluster_stats, by = "stat") %>%
+      left_join(all_stats, by = "stat") %>%
+      left_join(global_stats, by = "stat") %>%
+      mutate(
+        curr_scaled    = ifelse(sd_val == 0, 0, (curr_value - mean_val) / sd_val),
+        cluster_scaled = ifelse(sd_val == 0, 0, (cluster_value - mean_val) / sd_val),
+        avg_scaled     = ifelse(sd_val == 0, 0, (avg_value - mean_val) / sd_val)
+      ) %>%
+      transmute(
+        stat,
+        stat_label = pretty_stat_labels[stat] %||% stat,
+        curr_value,
+        curr_scaled,
+        cluster_value = round(cluster_value, 3),
+        cluster_scaled,
+        avg_value,
+        avg_scaled
+      )
+    
+    return(radar_data)
   } else {
     return(NULL)
   }
@@ -541,7 +650,7 @@ makeCoRadarPlot <- function(input, output, curr_course) {
         showlegend = FALSE
       ) %>%
       config(displayModeBar = FALSE)
-  } else if(input$co_fit_viz == "OTT Strategy") {
+  } else if(input$co_fit_viz == "OTT Strategy" | input$co_fit_viz == "Course Attributes") {
     
     # Set stat for radar radius value
     r_course <- radar_data$curr_scaled
@@ -636,8 +745,6 @@ makeCoRadarPlot <- function(input, output, curr_course) {
   } else {
     return(NULL)
   }
-  
- 
 }
 
 
