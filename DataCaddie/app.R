@@ -34,6 +34,7 @@ source("courseOverview.R")
 source("customModel.R")
 source("generatedLineups.R")
 source("multiFilter.R")
+source("favorites.R")
 
 ui <- tagList(
   useShinyjs(),   # initialize shinyjs
@@ -856,6 +857,30 @@ ui <- tagList(
                )
              )
     ),
+    tabPanel("Favorites", 
+             h4("Favorites"),
+             
+             tags$head(tags$script(HTML("
+              Shiny.addCustomMessageHandler('favoriteClick', function(player) {
+                Shiny.setInputValue('favorite_clicked', player, {priority: 'event'});
+              });
+            "))),
+             
+             tags$style(HTML("
+              .favorite-row {
+                  background-color: #FFF9C4 !important;
+                  border-top: 4px solid #FFF9C4;
+                  border-bottom: 4px solid #FFF9C4;
+                }
+            ")),
+             layout_columns(
+               col_widths = c(4, 8),
+               fill = TRUE,
+               card(
+                 reactableOutput("favorites_table")
+               )
+             )
+    ),
     
     tags$style(HTML("
       .nav-item a[data-value='Generated Lineups'] {
@@ -1000,6 +1025,10 @@ server <- function(input, output, session) {
                              playersInTournamentPgaNames, session$userData$optimizerData)
     } else if(input$siteTabs == "Multi-Filter"){
       serverMultiFilter(input, output, session, favorite_players,
+                        playersInTournament, playersInTournamentTourneyNameConv,
+                        playersInTournamentPgaNames)
+    } else if(input$siteTabs == "Favorites") {
+      serverFavorites(input, output, session, favorite_players,
                         playersInTournament, playersInTournamentTourneyNameConv,
                         playersInTournamentPgaNames)
     } else {
