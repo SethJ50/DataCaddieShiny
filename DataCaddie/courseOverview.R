@@ -73,6 +73,18 @@ serverCourseOverview <- function(input, output, session, favorite_players,
     )
   })
   
+  observeEvent(possible_years(), {
+    yrs <- possible_years()
+    req(length(yrs) > 0)
+    
+    shinyWidgets::updatePickerInput(
+      session,
+      inputId = "co_scoring_table_year",
+      choices = yrs,
+      selected = "all"
+    )
+  })
+  
   # Set Year Selection
   output$co_year_selection <- renderUI({
     req(input$co_course)
@@ -1080,10 +1092,24 @@ makePlayerTable <- function(input, output, favorite_players, playersInTournament
     }
   })
   
-  output$co_score_hist_tab <- renderUI({
-    req(input$co_tables_selected == "Scoring History")
+  output$co_score_hist_tab <- renderReactable({
+    req(input$co_course)
+    req(input$co_scoring_table_year)
     
+    scoring_table_data <- makeScoringTableData(
+      curr_course = input$co_course,
+      favorite_players = favorite_players,
+      playersInTournament = playersInTournament,
+      curr_year = input$co_scoring_table_year
+    )
     
+    if(!is.null(scoring_table_data)){
+      makeScoringTable(
+        scoring_table_data = scoring_table_data,
+        favorite_players = favorite_players,
+        year = input$co_scoring_table_year
+      )
+    }
   })
 }
 
@@ -1234,6 +1260,100 @@ makeCourseHistoryTableData <- function(curr_course, favorite_players, playersInT
         drDist_perc      = round(sapply(drDist, calculatePercentile, drDist), 1)
       )
   }
+  
+  favs <- favorite_players$names
+  
+  tournament_data <- tournament_data %>% 
+    mutate(
+      isFavorite = player %in% favs
+    )
+  
+  # Create .favorite column to hold star	
+  tournament_data$.favorite <- NA
+  
+  # Rearrange .favorite to be the first column
+  tournament_data <- tournament_data[, c(".favorite", setdiff(names(tournament_data), ".favorite"))]
+  
+  return(tournament_data)
+}
+
+makeScoringTableData <- function(curr_course, favorite_players, playersInTournament, curr_year) {
+  
+  # Make Name Conversions
+  playersInTournamentTourneyNameConv <- nameFanduelToTournament(playersInTournament)
+  playersInTournamentPgaNames <- nameFanduelToPga(playersInTournament)
+  
+  # Get FanDuel and DraftKigns Salary Data
+  salaryData <- salaries %>% 
+    filter(player %in% playersInTournament) %>% 
+    select(player, fdSalary, dkSalary)
+  
+  # Function to Calculate the Percentile of a value within a column's data
+  calculatePercentile <- function(value, column_data) {
+    column_data <- column_data[!is.na(column_data)]
+    
+    mean(column_data <= value) * 100
+  }
+  
+  # Get SG & finish data for tournament rounds
+  if(curr_year == "all") {
+    #   | player | sgPutt | ... | sgOtt | drAcc | drDist | numRds |
+    tournament_data <- data %>% 
+      filter(
+        player %in% playersInTournamentTourneyNameConv,
+        course == curr_course,
+        Round != "Event"
+      )
+  } else {
+    #   | player | dates | sgPutt | ... | sgOtt | drAcc | drDist | numRds |
+    tournament_data <- data %>% 
+      filter(
+        Round != "Event"
+      ) %>% 
+      mutate(
+        year = as.numeric(paste0("20", substr(dates, nchar(dates)-1, nchar(dates))))
+      ) %>% 
+      filter(
+        player %in% playersInTournamentTourneyNameConv,
+        course == curr_course,
+        as.character(year) == curr_year
+      )
+  }
+  
+  tournament_data <- tournament_data %>% 
+    mutate(
+      across(
+        c(eagles, birdies, pars, bogeys, doubleBogeys),
+        ~ replace_na(.x, 0)
+      )
+    ) %>% 
+    arrange(dates) %>% 
+    group_by(player) %>% 
+    summarise(
+      tournament = last(tournament),
+      eagles = round(mean(eagles, na.rm = TRUE), 2),
+      birdies  = round(mean(birdies,  na.rm = TRUE), 2),
+      pars  = round(mean(pars,  na.rm = TRUE), 2),
+      bogeys  = round(mean(bogeys,  na.rm = TRUE), 2),
+      doubleBogeys = round(mean(doubleBogeys, na.rm = TRUE), 2),
+      
+      numRds = n(),
+      .groups = "drop"
+    )
+  
+  if(nrow(tournament_data) < 1) {
+    return(NULL)
+  }
+  
+  tournament_data <- tournament_data %>% 
+    mutate(
+      Player = player,
+      eagles_perc      = round(sapply(eagles, calculatePercentile, eagles), 1),
+      birdies_perc       = round(sapply(birdies,  calculatePercentile, birdies), 1),
+      pars_perc       = round(sapply(pars,  calculatePercentile, pars), 1),
+      bogeys_perc       = round(sapply(bogeys,  calculatePercentile, bogeys), 1),
+      doubleBogeys_perc       = round(sapply(doubleBogeys,  calculatePercentile, doubleBogeys), 1)
+    )
   
   favs <- favorite_players$names
   
@@ -1650,6 +1770,55 @@ makeCourseHistoryTable <- function(output, ch_table_data, favorite_players, year
   
   table <- makeBasicTable(table_data, col_defs, "sgTot", favorite_players, hasFavorites = TRUE,
                  font_size = 10, row_height = 22)
+  
+  return(table)
+}
+
+makeScoringTable <- function(output, scoring_table_data, favorite_players, year) {
+  table_cols <- list(
+    Player = "Player", eagles = "EAGLES", birdies = "BIRDIES", pars = "PARS",
+    bogeys = "BOGEYS", doubleBogeys = "DB BOGEYS", numRds = "Rds"
+  )
+  
+  # Make column defs
+  col_defs <- lapply(names(table_cols), function(col) {
+    norm_col <- paste0(col, "_perc")
+    
+    if (norm_col %in% names(scoring_table_data)) {
+      norm_data <- scoring_table_data[[norm_col]]
+      col_func <- makeColorFunc(min_val = 0, max_val = 100)
+    } else {
+      norm_data <- NULL
+      col_func <- NULL
+    }
+    
+    col_inner <- table_cols[[col]]
+    
+    width <- case_when(
+      col_inner %in% c("Player") ~ 150,
+      col_inner == "Rds" ~ 35,
+      TRUE ~ 75
+    )
+    
+    makeColDef(
+      col_name = col,
+      display_name = table_cols[[col]],
+      width = width,
+      color_func = col_func,
+      norm_data = norm_data,
+      header_size = 10
+    )
+  })
+  
+  names(col_defs) <- names(table_cols)
+  
+  col_defs[["isFavorite"]] <- colDef(show = FALSE)
+  
+  table_data <- scoring_table_data %>% 
+    select(`.favorite`, names(table_cols), isFavorite)
+  
+  table <- makeBasicTable(table_data, col_defs, "numRds", favorite_players, hasFavorites = TRUE,
+                          font_size = 10, row_height = 22)
   
   return(table)
 }

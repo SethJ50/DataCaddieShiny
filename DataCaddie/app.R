@@ -338,6 +338,27 @@ ui <- tagList(
                   font-size: 12px !important;
                 }
                 
+                #co_scoring_table_year + .dropdown-toggle {
+                  font-size: 10px !important;
+                  height: 25px !important;
+                  padding: 0px 6px !important;
+                  width: 80px !important;
+              
+                  display: flex !important;
+                  align-items: center !important;
+                  justify-content: center !important;
+                  text-align: center !important;
+                  
+                  background-color: #fafafa;
+                  border: 1px solid #ddd;
+                  border-radius: 8px;
+                  margin-top: -15px;
+                }
+                
+                #co_scoring_table_year-label {
+                  font-size: 12px !important;
+                }
+                
                 #co_fit_viz + .dropdown-toggle {
                   font-size: 10px !important;
                   height: 25px !important;
@@ -364,6 +385,10 @@ ui <- tagList(
                 }
                 
                 #co_ch_table {
+                  margin-top: -45px !important;
+                }
+                
+                #co_score_hist_tab {
                   margin-top: -45px !important;
                 }
                 
@@ -522,7 +547,18 @@ ui <- tagList(
                      nav_panel("Proj. Course Fit", uiOutput("co_proj_fit_tab") %>% withSpinner(color = "#0dc5c1")),
                      nav_panel("Similar Course Perf.", uiOutput("co_sim_course_tab") %>% withSpinner(color = "#0dc5c1")),
                      nav_panel("OTT Course Perf.", uiOutput("co_ott_perf_tab") %>% withSpinner(color = "#0dc5c1")),
-                     nav_panel("Scoring History", uiOutput("co_score_hist_tab"))
+                     nav_panel("Scoring History",
+                               div(
+                                 style = "z-index: 10; width: fit-content;",
+                                 shinyWidgets::pickerInput(
+                                   inputId = "co_scoring_table_year",
+                                   label = "Year:",
+                                   choices = NULL,
+                                   selected = NULL
+                                 )
+                               ),
+                               reactableOutput("co_score_hist_tab")
+                     )
                    )
                  )
                )
