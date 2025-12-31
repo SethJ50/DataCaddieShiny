@@ -1,6 +1,6 @@
 library(reactable)
 library(tidyverse)
-
+library(plotly)
 
 makeColorFunc <- function(palette = c("#F83E3E", "white", "#4579F1"),
                           min_val = 0, max_val = 1, reverse_colors = FALSE) {
@@ -148,3 +148,59 @@ makeBasicTable <- function(data, col_defs, default_sorted, favorite_players, has
   
   return(table)
 }
+
+makeBasicRadarPlot <- function(traces, r_min, r_max) {
+  
+  p <- plot_ly(
+    type = 'scatterpolar',
+    fill = 'toself',
+    showlegend = TRUE
+  )
+  
+  for(i in seq_along(traces)) {
+    curr_trace <- traces[[i]]
+    
+    p <- p %>% 
+      add_trace(
+        r = curr_trace$r,
+        theta = curr_trace$theta,
+        name = curr_trace$name,
+        mode = "lines+markers",
+        text = curr_trace$text,
+        hoverinfo = "text",
+        marker = list(color = curr_trace$color),
+        line = list(color = curr_trace$color),
+        fillcolor = curr_trace$fillcolor,
+        connectgaps = TRUE
+      )
+  }
+  
+  p <- p %>% 
+    layout(
+      polar = list(
+        radialaxis = list(
+          visible = TRUE,
+          range = c(r_min, r_max),
+          showline = FALSE,
+          showticklabels = FALSE
+        ),
+        angularaxis = list(
+          tickfont = list(size = 9)
+        )
+      ),
+      margin = list(l = 0, r = 0, t = 30, b = 60),
+      width = 300,
+      height = 250,
+      showlegend = FALSE
+    ) %>%
+    config(displayModeBar = FALSE)
+  
+  return(p)
+}
+
+
+
+
+
+
+

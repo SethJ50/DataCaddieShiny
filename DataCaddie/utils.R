@@ -45,7 +45,13 @@ getColumnColors <- function(col_name, data, color_mode = "Gradient") {
     
     ramp_colors <- c("#F83E3E", "white", "#4579F1")
     
-    colors <- rgb(colorRamp(ramp_colors)(data_normalized), maxColorValue = 255)
+    colors <- rep("white", length(col_data))  # gray for NA
+    
+    # Only compute gradient for non-NA values
+    non_na_idx <- !is.na(data_normalized)
+    if (any(non_na_idx)) {
+      colors[non_na_idx] <- rgb(colorRamp(ramp_colors)(data_normalized[non_na_idx]), maxColorValue = 255)
+    }
     return(colors)
   } else if (color_mode == "Flags") {
     q <- quantile(col_data, probs = c(0.25, 0.5, 0.75), na.rm = TRUE)

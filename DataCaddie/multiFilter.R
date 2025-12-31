@@ -6,6 +6,157 @@ serverMultiFilter <- function(input, output, session, favorite_players,
   
   rdByRd_playerData <- getRoundByRoundData(playersInTournament, data)
   
+  # ----- Set Info Boxes ----- 
+  observeEvent(input$mf_tool_info, {
+    showModal(modalDialog(
+      title = "Multi-Filter Tool Info",
+      tagList(
+        tags$p(
+          tags$h5("Overview:")
+        ),
+        tags$p(
+          "This tool allows filtering a player's past rounds by multiple facets to analyze player performance
+          in different scenarios, including course setup, field strength, and more. After setting the filters
+          of interest, you can select from one of the various views to analyze performance from a different
+          perspective. View descriptions for each view by clicking the info icon below the dropdown after you select it."
+        )
+      ),
+      easyClose = TRUE,
+      footer = modalButton("Close")
+    ))
+  })
+  
+  observeEvent(input$mf_sg_info, {
+    showModal(modalDialog(
+      title = "Strokes Gained View Info",
+      tagList(
+        tags$p(
+          tags$h5("Overview:")
+        ),
+        tags$p(
+          "This table shows each player's round-by-round average SG statistics,
+          as well as the trend of these values in their last {RecRds} rounds versus their baseline."
+        ),
+        tags$hr(),
+        tags$p(
+          tags$h5("Columns:")
+        ),
+        tags$ul(
+          tags$li(tags$strong("SG Columns:"), " Average round-by-round SG in this category over the past N rounds."),
+          tags$li(tags$strong("Unlabeled Columns:"), " The change in value of the column to the left between the player's
+                  most recent {RecRds} rounds versus their baseline (most recent {BaseRds} rounds, serving as a baseline
+                  that estimates a larger sample representative of their overall skill). For example, the column to the
+                  right of SG PUTT can be interpreted as: In their most recent {RecRds} rounds, this player has gained
+                  {Column Value} more strokes putting than their usual baseline (represented by their {BaseRds} most recent rounds)."),
+          tags$li(tags$strong("RecRds:"), " The number of rounds used to determine averages for SG statistics."),
+          tags$li(tags$strong("BaseRds:"), " The number of rounds used to calculate baseline averages for computation of Unlabeled Columns.")
+        )
+      ),
+      easyClose = TRUE,
+      footer = modalButton("Close")
+    ))
+  })
+  
+  observeEvent(input$mf_ott_info, {
+    showModal(modalDialog(
+      title = "Off-The-Tee View Info",
+      tagList(
+        tags$p(
+          tags$h5("Overview:")
+        ),
+        tags$p(
+          "This table shows each player's round-by-round average off-the-tee related statistics,
+          as well as the trend of these values in their last {RecRds} rounds versus their baseline."
+        ),
+        tags$hr(),
+        tags$p(
+          tags$h5("Columns:")
+        ),
+        tags$ul(
+          tags$li(tags$strong("DR. DIST:"), " Average driving distance."),
+          tags$li(tags$strong("DR. ACC:"), " Average driving accuracy."),
+          tags$li(tags$strong("SG: OTT:"), " Round-by-round average strokes gained off-the-tee."),
+          tags$li(tags$strong("Unlabeled Columns:"), " The change in value of the column to the left between the player's
+                  most recent {RecRds} rounds versus their baseline (most recent {BaseRds} rounds, serving as a baseline
+                  that estimates a larger sample representative of their overall skill). For example, the column to the
+                  right of DR DIST can be interpreted as: In their most recent {RecRds} rounds, this player's driving
+                  distance has been {Column Value} yards longer than their standard driving distance (represented by their {BaseRds} most recent rounds)."),
+          tags$li(tags$strong("RecRds:"), " The number of rounds used to determine averages for DR DIST, DR ACC, and SG OTT values."),
+          tags$li(tags$strong("BaseRds:"), " The number of rounds used to calculate baseline averages for computation of Unlabeled Columns.")
+        )
+      ),
+      easyClose = TRUE,
+      footer = modalButton("Close")
+    ))
+  })
+  
+  observeEvent(input$mf_trends_info, {
+    showModal(modalDialog(
+      title = "Trends View Info",
+      tagList(
+        tags$p(
+          tags$h5("Overview:")
+        ),
+        tags$p(
+          "This table shows how a player's game is trending in their most recent {RecRds} rounds as compared to their baseline
+          (their most recent {BaseRds} rounds). It also includes a composite metric, SG HEAT, reflecting how 'hot' a player
+          is, i.e., how well they've been playing above their baseline recently as a whole."
+        ),
+        tags$hr(),
+        tags$p(
+          tags$h5("Columns:")
+        ),
+        tags$ul(
+          tags$li(tags$strong("SG: PUTT, ARG, APP, OTT:"), " The difference between the player's average round-by-round
+                  values in the most recent {RecRds} rounds and their average round-by-round baseline (most recent {BaseRds} rounds)."),
+          tags$li(tags$strong("SG HEAT:"), " The sum of all SG values relative to baseline, reflecting how the entirety
+                  of their game is trending. Higher values indicate players that are 'trending'."),
+          tags$li(tags$strong("RecRds:"), " The number of rounds used to calculate recent averages for SG stats."),
+          tags$li(tags$strong("BaseRds:"), " The number of rounds used to create baseline averages for a player's overall typical performance.")
+        )
+      ),
+      easyClose = TRUE,
+      footer = modalButton("Close")
+    ))
+  })
+  
+  observeEvent(input$mf_fc_info, {
+    showModal(modalDialog(
+      title = "Floor/Ceiling View Info",
+      tagList(
+        tags$p(
+          tags$h5("Overview:")
+        ),
+        tags$p(
+          "This table shows the percentage of a player's rounds in which they gain 0+, 1+, ..., 5+ strokes to the field,
+          as well as the trend of this value in the player's most recent {RecRds} rounds compared to their baseline
+          (most recent {BaseRds} rounds). The goal of this table is to quantify players based on their upside (ceiling)
+          — the amount of time they outperform the field — versus their consistency/safety (floor) — the amount of time
+          they finish in the better half of the field — and everything in between. This can help make decisions on which
+          players to place in lineups depending on your risk tolerance or desire for safety vs. upside."
+        ),
+        tags$hr(),
+        tags$p(
+          tags$h5("Columns:")
+        ),
+        tags$ul(
+          tags$li(tags$strong("SG X+:"), " The percentage of rounds, in the player's most recent {RecRds} rounds,
+                  in which a player gained X or more strokes on the field."),
+          tags$li(tags$strong("Unlabeled Columns:"), " The change in value of the column to the left between the
+                  player's most recent {RecRds} rounds versus their baseline (most recent {BaseRds} rounds,
+                  serving as a baseline that estimates a larger sample representative of their overall skill).
+                  For example, the column to the right of SG 0+ can be interpreted as: In their most recent {RecRds} rounds,
+                  this player has gained 0 or more strokes on the field in {Column Value} % more rounds than their standard
+                  baseline (represented by their {BaseRds} most recent rounds)."),
+          tags$li(tags$strong("RecRds:"), " The number of rounds used to determine SG X+ values."),
+          tags$li(tags$strong("BaseRds:"), " The number of rounds used to calculate baseline averages for computation of Unlabeled Columns.")
+        )
+      ),
+      easyClose = TRUE,
+      footer = modalButton("Close")
+    ))
+  })
+  
   observeEvent(input$stat_view_filter, {
     if (input$stat_view_filter == "Strokes Gained") {
       updateNumericInput(session, "rec_rds_mf", value = 100)

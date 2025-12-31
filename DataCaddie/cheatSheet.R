@@ -124,7 +124,7 @@ serverCheatSheet <- function(input, output, session, favorite_players, playersIn
     }
     
     # Make PGATOUR Stats Col Defs
-    pgatour_col_defs <- makePgaColDefs(cheatSheetData, color_mode)
+    pgatour_col_defs <- makePgaColDefs(allData, color_mode)
     all_col_defs <- c(all_col_defs, pgatour_col_defs)
     
     # Make Course History Col Defs

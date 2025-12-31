@@ -21,16 +21,15 @@ serverCourseOverview <- function(input, output, session, favorite_players,
                                  playersInTournament, playersInTournamentTourneyNameConv,
                                  playersInTournamentPgaNames) {
   
+  # ----- SET WEEK'S COURSE -----
   week_course <- "Augusta National Golf Club"
-  
-  # Set Weekly Course
   shinyWidgets::updatePickerInput(
     session,
     inputId = "co_course",
     selected = week_course
   )
   
-  # Get Round by Round Data
+  # ---- Get Round by Round Data -----
   round_by_round <- data %>%
     filter(Round != "Event") %>% 
     select(course, dates, eagles, birdies, pars, bogeys, doubleBogeys) %>%
@@ -54,6 +53,7 @@ serverCourseOverview <- function(input, output, session, favorite_players,
       year = as.numeric(paste0("20", substr(dates, nchar(dates)-1, nchar(dates))))
     )
   
+  # ----- Get Possible Years for Current Course -----
   possible_years <- reactive({
     req(input$co_course)
     
@@ -63,6 +63,7 @@ serverCourseOverview <- function(input, output, session, favorite_players,
       unique()
   })
   
+  # ----- Update Course History Table Year Input ------
   observeEvent(possible_years(), {
     yrs <- possible_years()
     req(length(yrs) > 0)
@@ -75,6 +76,7 @@ serverCourseOverview <- function(input, output, session, favorite_players,
     )
   })
   
+  # ----- Update Scoring Table's Year Input -----
   observeEvent(possible_years(), {
     yrs <- possible_years()
     req(length(yrs) > 0)
@@ -87,7 +89,7 @@ serverCourseOverview <- function(input, output, session, favorite_players,
     )
   })
   
-  # Set Year Selection
+  # ----- On Course Selection, Set Stat Table Year Input -----
   output$co_year_selection <- renderUI({
     req(input$co_course)
     
@@ -107,37 +109,7 @@ serverCourseOverview <- function(input, output, session, favorite_players,
     )
   })
   
-  ## Make Center Visualization Console
-  # Make Radar Plot
-  output$co_stat_radar <- renderPlotly({
-    req(input$co_course, input$co_fit_viz)
-    
-    makeCoRadarPlot(input, output, input$co_course)
-  })
-  
-  observeEvent(input$co_importance_info, {
-    showModal(modalDialog(
-      title = "Importance Type Explanation",
-      HTML(
-        "<b>Scaled:</b> Shows absolute predictive power of each feature, exhibiting,
-        for example, that approach is more predictive than putting on all
-        courses.
-        ==> Use this to develop predictive models for the course, taking into
-        account predictive power of each feature<br/>
-       <b>Raw:</b> Z-Score Normalizes each feature and plots current courses
-        value as number of standard deviations above or below average. Shows
-        more clearly the differences in importance of features across courses,
-        but doesn't show the absolute importance of the feature in comparison
-        to one another. 
-        ==> Use this to evaluate differences between courses
-          i.e. see how the importance of stats of this course differs from others"
-      ),
-      easyClose = TRUE,
-      footer = modalButton("Close")
-    ))
-  })
-  
-  # Output Course Stats Table
+  # ----- Output Course Stats Table (left) -----
   output$coStatsTable <- renderReactable({
     req(input$co_stat_year)
     curr_course <- input$co_course
@@ -153,6 +125,220 @@ serverCourseOverview <- function(input, output, session, favorite_players,
     makeCategoryDropdownTable(table_data)
   })
   
+  
+  # ----- Make Radar Plot -----
+  output$co_stat_radar <- renderPlotly({
+    req(input$co_course, input$co_fit_viz)
+    
+    makeCoRadarPlot(input, output, input$co_course)
+  })
+  
+  # ----- Display Info on click of Radar Stat Importance Type -----
+  observeEvent(input$co_importance_info, {
+    showModal(modalDialog(
+      title = "Importance Type Explanation",
+      tagList(
+        tags$p(
+          tags$h5("Scaled: "),
+          "Shows absolute predictive power of each feature. For example, approach is
+     more predictive than putting on all courses."
+        ),
+        tags$p(
+          tags$em("Use this to: "),
+          "Develop predictive models for a course while accounting for the relative
+     predictive power of each feature."
+        ),
+        
+        tags$hr(),
+        
+        tags$p(
+          tags$h5("Raw: "),
+          "Z-score normalizes each feature and plots the current course’s value as
+     the number of standard deviations above or below average."
+        ),
+        tags$p(
+          "This view highlights differences in feature importance across courses,
+     but does not show absolute importance across features."
+        ),
+        tags$p(
+          tags$em("Use this to: "),
+          "Evaluate how the statistical importance of this course differs from others."
+        )
+      ),
+      easyClose = TRUE,
+      footer = modalButton("Close")
+    ))
+  })
+  
+  # ----- Info Button for Course History Table -----
+  observeEvent(input$co_ch_table_info, {
+    showModal(modalDialog(
+      title = "Course History Table Info",
+      tagList(
+        tags$p(
+          tags$h5("Overview:")
+        ),
+        tags$p("Highlights a player's average statistics on a selected course."),
+        tags$hr(),
+        tags$p(
+          tags$h5("Columns:")
+        ),
+        tags$ul(
+          tags$li(tags$strong("Best / Worst:"), " Player's best and worst finish on the course"),
+          tags$li(tags$strong("InCut%:"), " Percentage of events in which the player has made the cut on this course"),
+          tags$li(tags$strong("SG + DR Stats:"), " Average round statistics on this course")
+        )
+      ),
+      easyClose = TRUE,
+      footer = modalButton("Close")
+    ))
+  })
+  
+  # ----- Info Button for Projected Fit Table -----
+  observeEvent(input$co_proj_fit_table_info, {
+    showModal(modalDialog(
+      title = "Projected Course Fit Table Info",
+      tagList(
+        tags$p(
+          tags$h5("Overview:")
+        ),
+        tags$p(
+          "A developed model uses a player's 'Basic Stats' (SG PUTT, SG ARG, SG APP, DR DIST, and DR ACC) in their last 50 rounds to project their SG TOT (per round) on this course.
+          Depending on the variance in outcomes on this course, 'Proj. SG: TOT' may be more confident (more extreme estimates) or more conservative (closer to 0 estimates).
+          The objective of this table is to give an idea of how a player's skillset fits to a course."
+        ),
+        tags$hr(),
+        tags$p(
+          tags$h5("Columns:")
+        ),
+        tags$ul(
+          tags$li(tags$strong("SG + DR Stats:"), " Average round-by-round statistics for a player in their most recent 50 rounds"),
+          tags$li(tags$strong("Proj. SG: TOT:"), " The model projection for overall strokes gained for the player (estimated per round)"),
+          tags$li(tags$strong("REL FIT:"), " An estimate of the relative fit of the player, measuring how far above (or below) their baseline
+                  (usual SG: TOT over their last 50 rounds) a player is projected to perform on this course. Calculated as Proj. SG: TOT - SG: TOT (L50).
+                  Higher values indicate a good course fit; negative values indicate a poor fit."),
+          tags$li(tags$strong("Rds:"), " The number of rounds available to calculate L50 statistics")
+        ),
+        tags$hr(),
+        tags$p(
+          tags$h5("Notes:")
+        ),
+        tags$p(
+          "To see what traits this course favors to make this projection, see the 'radar' plot in the middle console of this page with 'Basic Stats' selected for the Course Fit Visualization dropdown."
+        )
+      ),
+      easyClose = TRUE,
+      footer = modalButton("Close")
+    ))
+  })
+  
+  # ----- Info Button for Similar Course Table -----
+  observeEvent(input$co_sim_course_table_info, {
+    showModal(modalDialog(
+      title = "Similar Course Performance Table Info",
+      tagList(
+        tags$p(
+          tags$h5("Overview:")
+        ),
+        tags$p(
+          "Using a technique called 'K-Means Clustering', we have created groups (or 'clusters') of courses on tour based on their defining attributes:
+          average par 4/5 length, average par 3 length, average score to par, ease of gaining strokes on approach, around the green, and putting,
+          missed fairway penalty, and average fairway width. This table seeks to make a more generalized 'course history' by overviewing the player's
+          average performance on all courses similar to this one (including past performances on this course itself). It shows both the player's average
+          SG: TOT per round on similar courses, as well as how this compares to their baseline performance across all courses."
+        ),
+        tags$hr(),
+        tags$p(
+          tags$h5("Columns:")
+        ),
+        tags$ul(
+          tags$li(tags$strong("SG + DR Stats:"), " Average round-by-round statistics for a player in all rounds on similar courses (or this course itself)"),
+          tags$li(tags$strong("SG: TOT:"), " Average SG: TOT per round on similar courses (or this course itself)"),
+          tags$li(tags$strong("TOT v. L50:"), " An estimate for relative boost to this player on similar courses (or this course itself) —
+                  how far above (or below) their baseline (usual SG: TOT performance over the most recent 50 rounds) a player is projected 
+                  to perform on a similar course. Calculated as SG: TOT (similar courses) - SG: TOT (L50)"),
+          tags$li(tags$strong("Rds:"), " Number of rounds the player has played on this course or similar courses")
+        ),
+        tags$hr(),
+        tags$p(
+          tags$h5("Notes:")
+        ),
+        tags$p(
+          "To see what traits this course (blue), itself and its similar courses (green),
+          and the average course (red) that these groupings are made upon, view the 'radar'
+          plot in the middle console of this page with 'Course Attributes' selected for the Course Fit Visualization Dropdown."
+        )
+      ),
+      easyClose = TRUE,
+      footer = modalButton("Close")
+    ))
+  })
+  
+  # ----- Info Button for Similar OTT Course Table -----
+  observeEvent(input$co_ott_table_info, {
+    showModal(modalDialog(
+      title = "OTT Course Performance Table Info",
+      tagList(
+        tags$p(
+          tags$h5("Overview:")
+        ),
+        tags$p(
+          "Using a technique called 'K-Means Clustering', we have created groups (or 'clusters') of courses
+          on tour based on their attributes defining how they play off-the-tee (OTT). These attributes grouped
+          upon are: Variance of Driving Distance, Average Driving Distance, Average Par 4/5 length, missed fairway penalty,
+          average fairway width, ease of SG: OTT, and average driving accuracy. This table seeks to quantify how a player does
+          on courses similar to the current course in terms of what they ask of a player off the tee. It provides information on
+          a player's average OTT-related statistics on this course as well as on courses determined as similar in terms of off-the-tee
+          attributes. It also quantifies whether the player performs better or worse on such courses (both off-the-tee and overall)."
+        ),
+        tags$hr(),
+        tags$p(
+          tags$h5("Columns:")
+        ),
+        tags$ul(
+          tags$li(tags$strong("SG: OTT, DR. DIST, DR. ACC:"), " Average round statistics for the player off-the-tee for this course and courses with similar OTT attributes."),
+          tags$li(tags$strong("SG: TOT:"), " Average total strokes gained per round for this course and courses with similar OTT attributes."),
+          tags$li(tags$strong("OTT v. L50:"), " An estimate for relative boost to this player's off-the-tee play on this course and courses with similar
+                  off-the-tee attributes — how far above (or below) their baseline (usual SG: OTT over their most recent 50 rounds) a player is projected
+                  to perform on a course with similar OTT attributes."),
+          tags$li(tags$strong("TOT v. L50:"), " An estimate for relative boost to this player's total play on this course and courses with similar
+                  off-the-tee attributes — how far above (or below) their baseline (usual SG: TOT over their most recent 50 rounds) a player is projected
+                  to perform on a course with similar OTT attributes."),
+          tags$li(tags$strong("Rds:"), " Number of rounds a player has played on this course and courses with similar OTT attributes.")
+        ),
+        tags$hr(),
+        tags$p(
+          tags$h5("Notes:")
+        ),
+        tags$p(
+          "To see what OTT attributes this course has (blue), itself and its similar courses have (green), and the average course has (red)
+          that these groupings are based on, view the 'radar' plot in the middle console of this page with 'OTT Strategy' selected for the Course Fit Visualization Dropdown."
+        )
+      ),
+      easyClose = TRUE,
+      footer = modalButton("Close")
+    ))
+  })
+  
+  # ----- Info Button for Scoring Table -----
+  observeEvent(input$co_scoring_table_info, {
+    showModal(modalDialog(
+      title = "Scoring History Table Info",
+      tagList(
+        tags$p(
+          tags$h5("Overview:")
+        ),
+        tags$p(
+          "This table shows round-by-round averages on hole scoring for player rounds on this course."
+        )
+      ),
+      easyClose = TRUE,
+      footer = modalButton("Close")
+    ))
+  })
+  
+  
+  # ----- Course Fit Table: Table Data Cache, Current Data Reactive -----
   course_fit_cache <- reactiveValues()
   
   cache_path <- "course_fit_cache.rds"
@@ -183,6 +369,8 @@ serverCourseOverview <- function(input, output, session, favorite_players,
     proj_fit_data
   })
   
+  
+  # ----- OTT Strategy Table: Table Data Cache, Current Data Reactive -----
   ott_cache <- reactiveValues()
   
   cache_path <- "ott_cache.rds"
@@ -209,6 +397,8 @@ serverCourseOverview <- function(input, output, session, favorite_players,
     ott_table_data
   })
   
+  
+  # ----- Course Attr's Table: Table Data Cache, Current Data Reactive -----
   ovr_course_cache <- reactiveValues()
   
   cache_path <- "ovr_cache.rds"
@@ -235,7 +425,8 @@ serverCourseOverview <- function(input, output, session, favorite_players,
     ovr_course_table_data
   })
   
-  # Make Player Tables
+  
+  # ----- Make Player Tables (Right) -----
   makePlayerTable(input, output, favorite_players, playersInTournament, input$co_course, course_fit_data, ott_data, ovr_course_data)
 }
 
@@ -672,55 +863,29 @@ makeCoRadarPlot <- function(input, output, curr_course) {
     stat_labels_closed <- c(radar_data$stat_label, radar_data$stat_label[1])
     field_vals_closed <- c(radar_data$avg_value, radar_data$avg_value[1])
     
-    plot_ly(
-      type = 'scatterpolar',
-      fill = 'toself',
-      showlegend = TRUE
-    ) %>% 
-      add_trace(
-        r = r_closedAll,
-        theta = theta_closed,
-        name = 'All',
-        mode = "lines+markers",
-        text = paste0("All: <br>",
-                      stat_labels_closed, ": ", field_vals_closed, "<br>"),
-        hoverinfo = "text",
-        marker = list(color = "#FF6666"),
-        line = list(color = "#FF6666"),
-        fillcolor = "rgba(255, 102, 102, 0.2)",
-        connectgaps = TRUE
-      ) %>%
-      add_trace(
-        r = r_closed,
-        theta = theta_closed,
-        name = input$co_course,
-        mode = "lines+markers",
-        text = paste0(input$co_course, ": <br>",
-                      stat_labels_closed,": ", course_vals_closed, "<br>"),
-        hoverinfo = "text",
-        marker = list(color = "navy"),
-        line = list(color = "navy"),
-        fillcolor = "rgba(0, 0, 128, 0.3)",
-        connectgaps = TRUE
-      ) %>%
-      layout(
-        polar = list(
-          radialaxis = list(
-            visible = TRUE,
-            range = c(r_min, r_max),
-            showline = FALSE,
-            showticklabels = FALSE
-          ),
-          angularaxis = list(
-            tickfont = list(size = 9)
-          )
-        ),
-        margin = list(l = 0, r = 0, t = 30, b = 60),
-        width = 300,
-        height = 250,
-        showlegend = FALSE
-      ) %>%
-      config(displayModeBar = FALSE)
+    all_trace <- list(
+      r = r_closedAll,
+      theta = theta_closed,
+      name = 'All',
+      text = paste0("All: <br>",
+                    stat_labels_closed, ": ", field_vals_closed, "<br>"),
+      color = "#FF6666",
+      fillcolor = "rgba(255, 102, 102, 0.2)"
+    )
+    
+    course_trace <- list(
+      r = r_closed,
+      theta = theta_closed,
+      name = input$co_course,
+      text = paste0(input$co_course, ": <br>",
+                    stat_labels_closed,": ", course_vals_closed, "<br>"),
+      color = "navy",
+      fillcolor = "rgba(0, 0, 128, 0.3)"
+    )
+    
+    traces <- list(all_trace, course_trace)
+    
+    makeBasicRadarPlot(traces, r_min, r_max)
   } else if(input$co_fit_viz == "OTT Strategy" | input$co_fit_viz == "Course Attributes") {
     
     # Set stat for radar radius value
@@ -750,69 +915,39 @@ makeCoRadarPlot <- function(input, output, curr_course) {
     cluster_vals_closed <- c(radar_data$cluster_value, radar_data$cluster_value[1])
     field_vals_closed <- c(radar_data$avg_value, radar_data$avg_value[1])
     
-    plot_ly(
-      type = 'scatterpolar',
-      fill = 'toself',
-      showlegend = TRUE
-    ) %>% 
-      add_trace(
-        r = r_closedAll,
-        theta = theta_closed,
-        name = 'All',
-        mode = "lines+markers",
-        text = paste0("All: <br>",
-                      stat_labels_closed, ": ", field_vals_closed, "<br>"),
-        hoverinfo = "text",
-        marker = list(color = "#FF6666"),
-        line = list(color = "#FF6666"),
-        fillcolor = "rgba(255, 102, 102, 0.2)",
-        connectgaps = TRUE
-      ) %>%
-      add_trace(
-        r = r_closedCluster,
-        theta = theta_closed,
-        name = 'All',
-        mode = "lines+markers",
-        text = paste0("All: <br>",
-                      stat_labels_closed, ": ", cluster_vals_closed, "<br>"),
-        hoverinfo = "text",
-        marker = list(color = "#90EE90"),
-        line = list(color = "#90EE90"),
-        fillcolor = "rgba(144, 238, 144, 0.30)",
-        connectgaps = TRUE
-      ) %>%
-      add_trace(
-        r = r_closed,
-        theta = theta_closed,
-        name = input$co_course,
-        mode = "lines+markers",
-        text = paste0(input$co_course, ": <br>",
-                      stat_labels_closed,": ", course_vals_closed, "<br>"),
-        hoverinfo = "text",
-        marker = list(color = "navy"),
-        line = list(color = "navy"),
-        fillcolor = "rgba(0, 0, 128, 0.3)",
-        connectgaps = TRUE
-      ) %>%
-      layout(
-        polar = list(
-          radialaxis = list(
-            visible = TRUE,
-            range = c(r_min, r_max),
-            showline = FALSE,
-            showticklabels = FALSE
-          ),
-          angularaxis = list(
-            tickfont = list(size = 9)
-          )
-        ),
-        margin = list(l = 0, r = 0, t = 30, b = 60),
-        width = 300,
-        height = 250,
-        showlegend = FALSE
-      ) %>%
-      config(displayModeBar = FALSE)
+    all_trace <- list(
+      r = r_closedAll,
+      theta = theta_closed,
+      name = 'All',
+      text = paste0("All: <br>",
+                    stat_labels_closed, ": ", field_vals_closed, "<br>"),
+      color = "#FF6666",
+      fillcolor = "rgba(255, 102, 102, 0.2)"
+    )
     
+    cluster_trace <- list(
+      r = r_closedCluster,
+      theta = theta_closed,
+      name = "Cluster",
+      text = paste0("Cluster: ", ": <br>",
+                    stat_labels_closed,": ", cluster_vals_closed, "<br>"),
+      color = "#90EE90",
+      fillcolor = "rgba(144, 238, 144, 0.30)"
+    )
+    
+    course_trace <- list(
+      r = r_closed,
+      theta = theta_closed,
+      name = input$co_course,
+      text = paste0(input$co_course, ": <br>",
+                    stat_labels_closed,": ", course_vals_closed, "<br>"),
+      color = "navy",
+      fillcolor = "rgba(0, 0, 128, 0.3)"
+    )
+    
+    traces <- list(all_trace, cluster_trace, course_trace)
+    
+    makeBasicRadarPlot(traces, r_min, r_max)
   } else {
     return(NULL)
   }
@@ -1557,6 +1692,7 @@ makeProjFitData <- function(curr_course, favorite_players, playersInTournament) 
     last50Rds <- getLastNRoundsPriorTo(curr_player, today_date, 50)
     if(nrow(last50Rds) == 0) next
     
+    # Use only rounds with all predictors for model prediction
     rounds_clean <- last50Rds %>% 
       filter(
         !is.na(sgPutt),
@@ -1579,36 +1715,52 @@ makeProjFitData <- function(curr_course, favorite_players, playersInTournament) 
       filter(!is.na(sg_tot_event))
     if (nrow(rounds_clean) == 0) next
     
-    agg <- rounds_clean %>%
+    # agg <- rounds_clean %>%
+    #   summarise(
+    #     sg_putt_l50 = mean(sgPutt),
+    #     sg_arg_l50  = mean(sgArg),
+    #     sg_app_l50  = mean(sgApp),
+    #     dr_dist_l50 = mean(drDist),
+    #     dr_acc_l50  = mean(drAcc),
+    #     sg_tot_l50 = mean(sg_tot_event),
+    #     numRds      = n()
+    #   )
+    # if (agg$numRds < 8) next
+    
+    # --- Aggregate ALL last50Rds, regardless of predictor completeness ---
+    agg_all <- last50Rds %>% 
+      select(player, sgPutt, sgArg, sgApp, drDist, drAcc, sgTot) %>% 
+      filter(!is.na(sgTot)) %>%   # ensure sgTot exists for aggregation
       summarise(
-        sg_putt_l50 = mean(sgPutt),
-        sg_arg_l50  = mean(sgArg),
-        sg_app_l50  = mean(sgApp),
-        dr_dist_l50 = mean(drDist),
-        dr_acc_l50  = mean(drAcc),
-        sg_tot_l50 = mean(sg_tot_event),
+        sg_putt_l50 = mean(sgPutt, na.rm = TRUE),
+        sg_arg_l50  = mean(sgArg, na.rm = TRUE),
+        sg_app_l50  = mean(sgApp, na.rm = TRUE),
+        dr_dist_l50 = mean(drDist, na.rm = TRUE),
+        dr_acc_l50  = mean(drAcc, na.rm = TRUE),
+        sg_tot_l50  = mean(sgTot, na.rm = TRUE),
         numRds      = n()
       )
-    if (agg$numRds < 8) next
     
-    player_data <- agg %>% 
+    if (agg_all$numRds < 8) next
+    
+    player_data <- agg_all %>% 
       select(all_of(model_features)) %>% 
       as.matrix()
     
     sgPred <- predict(curr_model, player_data)
-    course_fit <- sgPred - agg$sg_tot_l50
+    course_fit <- sgPred - agg_all$sg_tot_l50
     
     results_list[[curr_player]] <- data.frame(
       player = curr_player,
-      sg_putt_l50 = round(agg$sg_putt_l50, 2),
-      sg_arg_l50  = round(agg$sg_arg_l50, 2),
-      sg_app_l50  = round(agg$sg_app_l50, 2),
-      dr_dist_l50 = round(agg$dr_dist_l50, 2),
-      dr_acc_l50  = round(agg$dr_acc_l50, 2),
-      sgTot = round(agg$sg_tot_l50, 2),
+      sg_putt_l50 = round(agg_all$sg_putt_l50, 2),
+      sg_arg_l50  = round(agg_all$sg_arg_l50, 2),
+      sg_app_l50  = round(agg_all$sg_app_l50, 2),
+      dr_dist_l50 = round(agg_all$dr_dist_l50, 2),
+      dr_acc_l50  = round(agg_all$dr_acc_l50, 2),
+      sgTot = round(agg_all$sg_tot_l50, 2),
       projSgTot = round(sgPred, 2),
       course_fit = round(course_fit, 2),
-      numRds = agg$numRds,
+      numRds = agg_all$numRds,
       stringsAsFactors = FALSE
     )
   }

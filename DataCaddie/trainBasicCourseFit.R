@@ -32,7 +32,20 @@ trainCourseFitModels <- function() {
       curr_row <- tourney_rows[j, ]
       curr_player <- curr_row$player
       curr_date <- curr_row$dates
-      sg_tot <- curr_row$sgTot
+      
+      # Predict Round Average SG:Tot
+      sg_tot <- data %>% 
+        filter(
+          player == curr_player,
+          dates == curr_date,
+          Round != "Event"
+        ) %>% 
+        summarise(
+          sg_tot = round(mean(sgTot, na.rm = TRUE), 2)
+        ) %>% 
+        pull(sg_tot)
+      
+      #sg_tot <- curr_row$sgTot
       
       if(is.na(sg_tot)) next
       

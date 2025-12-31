@@ -57,12 +57,18 @@ ui <- tagList(
   ),
 
   page_navbar(
-    title = "DataCaddie",
+    title = tags$a(
+      href = "#",
+      tags$img(
+        src = "datacaddie_full_background.png",
+        height = "30px"
+      )
+    ),
     id = "siteTabs",
     theme = theme,
     tabPanel("Home", 
              h4("Welcome"), 
-             p("Your golf analytics go here!")
+             p("Welcome to DataCaddie, your go-to site for PGA Tour Analytics!")
     ),
     
     tabPanel("Cheat Sheet",
@@ -389,6 +395,18 @@ ui <- tagList(
                   margin-top: -45px !important;
                 }
                 
+                #co_proj_fit_tab {
+                  margin-top: -45px !important;
+                }
+                
+                #co_sim_course_tab {
+                  margin-top: -45px !important;
+                }
+                
+                #co_ott_perf_tab {
+                  margin-top: -45px !important;
+                }
+                
                 #co_score_hist_tab {
                   margin-top: -45px !important;
                 }
@@ -464,6 +482,11 @@ ui <- tagList(
                     border-top: 4px solid #FFF9C4;
                     border-bottom: 4px solid #FFF9C4;
                 }
+                
+                #co_ch_table_year.shiny-input-container {
+                  width: fit-content !important;
+                  margin-bottom: 0 !important;
+                }
             ")),
              
              layout_columns(
@@ -537,7 +560,15 @@ ui <- tagList(
                      placement = "above",
                      nav_panel("Course History",
                                div(
-                                 style = "z-index: 10; width: fit-content;",
+                                 style = "display: flex; flex-direction: column; align-items: flex-start; gap: 4px; z-index: 10; width: fit-content;",
+                                 actionButton(
+                                   inputId = "co_ch_table_info",
+                                   label = tagList(
+                                     tags$span("Table Info", style = "margin-right: 4px;"),
+                                     icon("info-circle")
+                                   ),
+                                   style = "padding: 2px 0px; font-size: 10px; margin-top: -5px;"
+                                 ),
                                  shinyWidgets::pickerInput(
                                    inputId = "co_ch_table_year",
                                    label = "Year:",
@@ -548,12 +579,59 @@ ui <- tagList(
                                
                                reactableOutput("co_ch_table")
                      ),
-                     nav_panel("Proj. Course Fit", uiOutput("co_proj_fit_tab") %>% withSpinner(color = "#0dc5c1")),
-                     nav_panel("Similar Course Perf.", uiOutput("co_sim_course_tab") %>% withSpinner(color = "#0dc5c1")),
-                     nav_panel("OTT Course Perf.", uiOutput("co_ott_perf_tab") %>% withSpinner(color = "#0dc5c1")),
+                     nav_panel("Proj. Course Fit",
+                               div(
+                                 style = "display: flex; flex-direction: column; align-items: flex-start; gap: 4px; z-index: 10; width: fit-content;",
+                                 actionButton(
+                                   inputId = "co_proj_fit_table_info",
+                                   label = tagList(
+                                     tags$span("Table Info", style = "margin-right: 4px;"),
+                                     icon("info-circle")
+                                   ),
+                                   style = "padding: 2px 0px; font-size: 10px; margin-top: -5px;"
+                                 )
+                               ),
+                               uiOutput("co_proj_fit_tab") %>% withSpinner(color = "#0dc5c1")
+                               ),
+                     nav_panel("Similar Course Perf.",
+                               div(
+                                 style = "display: flex; flex-direction: column; align-items: flex-start; gap: 4px; z-index: 10; width: fit-content;",
+                                 actionButton(
+                                   inputId = "co_sim_course_table_info",
+                                   label = tagList(
+                                     tags$span("Table Info", style = "margin-right: 4px;"),
+                                     icon("info-circle")
+                                   ),
+                                   style = "padding: 2px 0px; font-size: 10px; margin-top: -5px;"
+                                 )
+                               ),
+                               uiOutput("co_sim_course_tab") %>% withSpinner(color = "#0dc5c1")
+                               ),
+                     nav_panel("OTT Course Perf.",
+                               div(
+                                 style = "display: flex; flex-direction: column; align-items: flex-start; gap: 4px; z-index: 10; width: fit-content;",
+                                 actionButton(
+                                   inputId = "co_ott_table_info",
+                                   label = tagList(
+                                     tags$span("Table Info", style = "margin-right: 4px;"),
+                                     icon("info-circle")
+                                   ),
+                                   style = "padding: 2px 0px; font-size: 10px; margin-top: -5px;"
+                                 )
+                               ),
+                               uiOutput("co_ott_perf_tab") %>% withSpinner(color = "#0dc5c1")
+                               ),
                      nav_panel("Scoring History",
                                div(
                                  style = "z-index: 10; width: fit-content;",
+                                 actionButton(
+                                   inputId = "co_scoring_table_info",
+                                   label = tagList(
+                                     tags$span("Table Info", style = "margin-right: 4px;"),
+                                     icon("info-circle")
+                                   ),
+                                   style = "padding: 2px 0px; font-size: 10px; margin-top: -5px;"
+                                 ),
                                  shinyWidgets::pickerInput(
                                    inputId = "co_scoring_table_year",
                                    label = "Year:",
@@ -808,6 +886,14 @@ ui <- tagList(
                col_widths = c(3, 9),
                fill = TRUE,
                card(
+                 actionButton(
+                   inputId = "mf_tool_info",
+                   label = tagList(
+                     tags$span("Multi-Filter Tool Info", style = "margin-right: 4px;"),
+                     icon("info-circle")
+                   ),
+                   style = "padding: 2px 0px; font-size: 10px; margin-top: -5px;"
+                 ),
                  radioGroupButtons(
                    inputId = "course_diff_filter",
                    label = "Course Difficulty:",
@@ -829,6 +915,53 @@ ui <- tagList(
                    options = list(
                      style = "btn-light",   # button style
                      size = 5
+                   )
+                 ),
+                 conditionalPanel(
+                   condition = "input.stat_view_filter == 'Strokes Gained'",
+                   actionButton(
+                     inputId = "mf_sg_info",
+                     label = tagList(
+                       tags$span("SG View Info", style = "margin-right: 4px;"),
+                       icon("info-circle")
+                     ),
+                     style = "padding: 2px 0px; font-size: 10px; margin-top: -5px;"
+                   )
+                 ),
+                 
+                 conditionalPanel(
+                   condition = "input.stat_view_filter == 'Off-the-Tee'",
+                   actionButton(
+                     inputId = "mf_ott_info",
+                     label = tagList(
+                       tags$span("OTT View Info", style = "margin-right: 4px;"),
+                       icon("info-circle")
+                     ),
+                     style = "padding: 2px 0px; font-size: 10px; margin-top: -5px;"
+                   )
+                 ),
+                 
+                 conditionalPanel(
+                   condition = "input.stat_view_filter == 'Trends'",
+                   actionButton(
+                     inputId = "mf_trends_info",
+                     label = tagList(
+                       tags$span("Trends View Info", style = "margin-right: 4px;"),
+                       icon("info-circle")
+                     ),
+                     style = "padding: 2px 0px; font-size: 10px; margin-top: -5px;"
+                   )
+                 ),
+                 
+                 conditionalPanel(
+                   condition = "input.stat_view_filter == 'Floor/Ceiling'",
+                   actionButton(
+                     inputId = "mf_fc_info",
+                     label = tagList(
+                       tags$span("Floor/Ceiling View Info", style = "margin-right: 4px;"),
+                       icon("info-circle")
+                     ),
+                     style = "padding: 2px 0px; font-size: 10px; margin-top: -5px;"
                    )
                  )
                ),
