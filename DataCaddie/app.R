@@ -53,7 +53,8 @@ ui <- tagList(
       Shiny.addCustomMessageHandler('saveFavorites', function(players) {
         localStorage.setItem('favorite_players', JSON.stringify(players));
       });
-    "))
+    ")),
+    tags$link(rel = "icon", type = "image/png", href = "datacaddie_browser_icon.png")
   ),
 
   page_navbar(
@@ -66,7 +67,7 @@ ui <- tagList(
     ),
     id = "siteTabs",
     theme = theme,
-    tabPanel("Home", 
+    tabPanel("Home",
              h4("Welcome"), 
              p("Welcome to DataCaddie, your go-to site for PGA Tour Analytics!")
     ),
