@@ -350,7 +350,7 @@ updateModelTable <- function(model_stats, output, favorite_players, platform) {
       color_func <- if (col == "Rating") getRatingColor else NULL
       
       makeColDef(col, display_name = display_col, width = width_val,
-                 sticky = "left", color_func = color_func, norm_data = NULL)
+                 color_func = color_func, norm_data = NULL)
     } else {
       # Other stat columns: color by _norm
       norm_col <- paste0(col, "_norm")
