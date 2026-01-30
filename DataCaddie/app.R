@@ -53,6 +53,15 @@ ui <- tagList(
       Shiny.addCustomMessageHandler('saveFavorites', function(players) {
         localStorage.setItem('favorite_players', JSON.stringify(players));
       });
+      
+      Shiny.addCustomMessageHandler('setPageTitle', function(title) {
+        document.title = title;
+      });
+      
+      // When browser back/forward is used
+      window.onpopstate = function(event) {
+        Shiny.setInputValue('url_search_updated', window.location.search);
+      };
     ")),
     tags$link(rel = "icon", type = "image/png", href = "datacaddie_browser_icon.png")
   ),
@@ -1218,13 +1227,7 @@ ui <- tagList(
                  reactableOutput("optimizer_results_tbl")
                )
              )
-    ),
-    tags$script(HTML("
-      // When browser back/forward is used
-      window.onpopstate = function(event) {
-        Shiny.setInputValue('url_search_updated', window.location.search);
-      };
-  "))
+    )
   )
 )
 
@@ -1274,6 +1277,14 @@ server <- function(input, output, session) {
   observeEvent(input$userToken, {
     cat("🔥 SERVER RECEIVED TOKEN:", input$userToken, "\n")
     user_token(input$userToken)
+  })
+  
+  # Set Page Titles
+  observeEvent(input$siteTabs, {
+    session$sendCustomMessage(
+      "setPageTitle",
+      paste("DataCaddie |", input$siteTabs)
+    )
   })
 
   observe({
