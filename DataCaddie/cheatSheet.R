@@ -52,6 +52,49 @@ statsDisplayOptions <- c(
   "Putt BOB%",
   "3 Putt Avd",
   "Bonus Putt.",
+  "SG EASY FIELD" = "SG Easy Field Adjusted",
+  "SG MEDIUM FIELD" = "SG Medium Field Adjusted",
+  "SG HARD FIELD" = "SG Hard Field Adjusted",
+  
+  "SG EASY COURSE" = "SG Easy Course Adjusted",
+  "SG MEDIUM DIFF COURSE" = "SG Medium Course Adjusted",
+  "SG HARD COURSE" = "SG Hard Course Adjusted",
+  
+  "SG SHORT COURSE" = "SG Short Course Adjusted",
+  "SG MEDIUM LEN COURSE" = "SG Medium Length Course Adjusted",
+  "SG LONG COURSE" = "SG Long Course Adjusted",
+  
+  "SG SHORT AVG DRIVE COURSE" = "SG Short Driver Courses Adjusted",
+  "SG MEDIUM AVG DRIVE COURSE" = "SG Medium Driver Courses Adjusted",
+  "SG LONG AVG DRIVE COURSE" = "SG Long Driver Courses Adjusted",
+  
+  "SG LOW AVG ACC COURSE" = "SG Low Accuracy Courses Adjusted",
+  "SG MEDIUM AVG ACC COURSE" = "SG Medium Accuracy Courses Adjusted",
+  "SG HIGH AVG ACC COURSE" = "SG High Accuracy Courses Adjusted",
+  
+  "SG NARROW FAIRWAYS" = "SG Narrow Fairways Adjusted",
+  "SG MEDIUM FAIRWAYS" = "SG Medium Fairways Adjusted",
+  "SG WIDE FAIRWAYS" = "SG Wide Fairways Adjusted",
+  
+  "SG LOW MISS FAIRWAY PENALTY" = "SG Low Miss Penalty Adjusted",
+  "SG MEDIUM MISS FAIRWAY PENALTY" = "SG Medium Miss Penalty Adjusted",
+  "SG HIGH MISS FAIRWAY PENALTY" = "SG High Miss Penalty Adjusted",
+  
+  "SG EASY OTT COURSE" = "SG Easy OTT Courses Adjusted",
+  "SG MEDIUM OTT COURSE" = "SG Medium OTT Courses Adjusted",
+  "SG HARD OTT COURSE" = "SG Hard OTT Courses Adjusted",
+  
+  "SG EASY APP COURSE" = "SG Easy APP Courses Adjusted",
+  "SG MEDIUM APP COURSE" = "SG Medium APP Courses Adjusted",
+  "SG HARD APP COURSE" = "SG Hard APP Courses Adjusted",
+  
+  "SG EASY ARG COURSE" = "SG Easy ARG Courses Adjusted",
+  "SG MEDIUM ARG COURSE" = "SG Medium ARG Courses Adjusted",
+  "SG HARD ARG COURSE" = "SG Hard ARG Courses Adjusted",
+  
+  "SG EASY PUTT COURSE" = "SG Easy Putting Courses Adjusted",
+  "SG MEDIUM PUTT COURSE" = "SG Medium Putting Courses Adjusted",
+  "SG HARD PUTT COURSE" = "SG Hard Putting Courses Adjusted",
   "Rec. 1" = "rec1",
   "Rec. 2" = "rec2",
   "Rec. 3" = "rec3",
@@ -83,6 +126,13 @@ serverCheatSheet <- function(input, output, session, favorite_players, playersIn
     
     # Get all data for cheat sheet
     dataAndTourneyNames <- get_all_player_data(favorite_players, playersInTournament, num_rounds)
+    
+    # Get Levels Data (Field Strength, Course Attrs) and Add Norms
+    courseDiffData <- getAllLevelsData(playersInTournament, data, 100)
+    courseDiffData <- add_normalized_columns(courseDiffData)
+    
+    dataAndTourneyNames$data <- dataAndTourneyNames$data %>% 
+      left_join(courseDiffData, by = "player")
     
     # Filter Cheat Sheet Data to only columns selected
     cheatSheetData <- dataAndTourneyNames$data %>% 
@@ -126,6 +176,10 @@ serverCheatSheet <- function(input, output, session, favorite_players, playersIn
     # Make PGATOUR Stats Col Defs
     pgatour_col_defs <- makePgaColDefs(allData, color_mode)
     all_col_defs <- c(all_col_defs, pgatour_col_defs)
+    
+    # Make Levels Col Defs
+    level_col_defs <- getLevelsColDefs(allData, color_mode)
+    all_col_defs <- c(all_col_defs, level_col_defs)
     
     # Make Course History Col Defs
     ch_col_defs <- makeCourseHistoryColDefs()
@@ -176,7 +230,54 @@ serverCheatSheet <- function(input, output, session, favorite_players, playersIn
       "3 Putt Avd", "Bonus Putt."
     )
     
+    levels_stats <- c(
+      "SG Easy Field Adjusted",
+      "SG Medium Field Adjusted",
+      "SG Hard Field Adjusted",
+      
+      "SG Easy Course Adjusted",
+      "SG Medium Course Adjusted",
+      "SG Hard Course Adjusted",
+      
+      "SG Short Course Adjusted",
+      "SG Medium Length Course Adjusted",
+      "SG Long Course Adjusted",
+      
+      "SG Short Driver Courses Adjusted",
+      "SG Medium Driver Courses Adjusted",
+      "SG Long Driver Courses Adjusted",
+      
+      "SG Low Accuracy Courses Adjusted",
+      "SG Medium Accuracy Courses Adjusted",
+      "SG High Accuracy Courses Adjusted",
+      
+      "SG Narrow Fairways Adjusted",
+      "SG Medium Fairways Adjusted",
+      "SG Wide Fairways Adjusted",
+      
+      "SG Low Miss Penalty Adjusted",
+      "SG Medium Miss Penalty Adjusted",
+      "SG High Miss Penalty Adjusted",
+      
+      "SG Easy OTT Courses Adjusted",
+      "SG Medium OTT Courses Adjusted",
+      "SG Hard OTT Courses Adjusted",
+      
+      "SG Easy APP Courses Adjusted",
+      "SG Medium APP Courses Adjusted",
+      "SG Hard APP Courses Adjusted",
+      
+      "SG Easy ARG Courses Adjusted",
+      "SG Medium ARG Courses Adjusted",
+      "SG Hard ARG Courses Adjusted",
+      
+      "SG Easy Putting Courses Adjusted",
+      "SG Medium Putting Courses Adjusted",
+      "SG Hard Putting Courses Adjusted"
+    )
+    
     shown_pga_stats <- intersect(pgatour_stats, colnames(cheatSheetData))
+    shown_level_stats <- intersect(levels_stats, colnames(cheatSheetData))
     
     colgroups <- list()
     colgroups <- append(colgroups, list(colGroup(name = "Last N SG", columns = c("sgPutt", "sgArg", "sgApp", "sgOtt", "sgT2G", "sgTot"))))
@@ -184,6 +285,9 @@ serverCheatSheet <- function(input, output, session, favorite_players, playersIn
     colgroups <- append(colgroups, list(colGroup(name = "Course History", columns = c("minus1", "minus2", "minus3", "minus4", "minus5"))))
     if(length(shown_pga_stats) > 0) {
       colgroups <- append(colgroups, list(colGroup(name = "PGATOUR Stats", columns = shown_pga_stats)))
+    }
+    if(length(shown_level_stats) > 0) {
+      colgroups <- append(colgroups, list(colGroup(name = "Level Stats", columns = shown_level_stats)))
     }
     
     col_defs[["isFavorite"]] <- colDef(show = FALSE)
@@ -362,6 +466,155 @@ makePgaColDefs <- function(cheatSheetData, color_mode = "Gradient") {
   return(col_defs)
 }
 
+getLevelsColDefs <- function(cheatSheetData, color_mode) {
+  
+  # Define Levels columns and their display names
+  cols <- data.frame(
+    col_key = c(
+      "SG Easy Field Adjusted",
+      "SG Medium Field Adjusted",
+      "SG Hard Field Adjusted",
+      
+      "SG Easy Course Adjusted",
+      "SG Medium Course Adjusted",
+      "SG Hard Course Adjusted",
+      
+      "SG Short Course Adjusted",
+      "SG Medium Length Course Adjusted",
+      "SG Long Course Adjusted",
+      
+      "SG Short Driver Courses Adjusted",
+      "SG Medium Driver Courses Adjusted",
+      "SG Long Driver Courses Adjusted",
+      
+      "SG Low Accuracy Courses Adjusted",
+      "SG Medium Accuracy Courses Adjusted",
+      "SG High Accuracy Courses Adjusted",
+      
+      "SG Narrow Fairways Adjusted",
+      "SG Medium Fairways Adjusted",
+      "SG Wide Fairways Adjusted",
+      
+      "SG Low Miss Penalty Adjusted",
+      "SG Medium Miss Penalty Adjusted",
+      "SG High Miss Penalty Adjusted",
+      
+      "SG Easy OTT Courses Adjusted",
+      "SG Medium OTT Courses Adjusted",
+      "SG Hard OTT Courses Adjusted",
+      
+      "SG Easy APP Courses Adjusted",
+      "SG Medium APP Courses Adjusted",
+      "SG Hard APP Courses Adjusted",
+      
+      "SG Easy ARG Courses Adjusted",
+      "SG Medium ARG Courses Adjusted",
+      "SG Hard ARG Courses Adjusted",
+      
+      "SG Easy Putting Courses Adjusted",
+      "SG Medium Putting Courses Adjusted",
+      "SG Hard Putting Courses Adjusted"
+    ),
+    
+    col_name = c(
+      "SG EASY FIELD",
+      "SG MEDIUM FIELD",
+      "SG HARD FIELD",
+      
+      "SG EASY COURSE",
+      "SG MEDIUM DIFF COURSE",
+      "SG HARD COURSE",
+      
+      "SG SHORT COURSE",
+      "SG MEDIUM LEN COURSE",
+      "SG LONG COURSE",
+      
+      "SG SHORT AVG DRIVE COURSE",
+      "SG MEDIUM AVG DRIVE COURSE",
+      "SG LONG AVG DRIVE COURSE",
+      
+      "SG LOW AVG ACC COURSE",
+      "SG MEDIUM AVG ACC COURSE",
+      "SG HIGH AVG ACC COURSE",
+      
+      "SG NARROW FAIRWAYS",
+      "SG MEDIUM FAIRWAYS",
+      "SG WIDE FAIRWAYS",
+      
+      "SG LOW MISS FAIRWAY PENALTY",
+      "SG MEDIUM MISS FAIRWAY PENALTY",
+      "SG HIGH MISS FAIRWAY PENALTY",
+      
+      "SG EASY OTT COURSE",
+      "SG MEDIUM OTT COURSE",
+      "SG HARD OTT COURSE",
+      
+      "SG EASY APP COURSE",
+      "SG MEDIUM APP COURSE",
+      "SG HARD APP COURSE",
+      
+      "SG EASY ARG COURSE",
+      "SG MEDIUM ARG COURSE",
+      "SG HARD ARG COURSE",
+      
+      "SG EASY PUTT COURSE",
+      "SG MEDIUM PUTT COURSE",
+      "SG HARD PUTT COURSE"
+    ),
+    
+    stringsAsFactors = FALSE
+  )
+  
+  
+  # For each column, create list of color values
+  color_map <- setNames(
+    lapply(cols$col_key, function(col_name) {
+      if (!is.null(cheatSheetData[[col_name]])) {
+        getColumnColors(col_name, cheatSheetData, color_mode)
+      } else {
+        rep(NA, nrow(cheatSheetData))  # fallback
+      }
+    }),
+    cols$col_key
+  )
+  
+  header = function(value) {
+    htmltools::div(title = value, value)
+  }
+  
+  
+  # Create column definitions for reactable
+  col_defs <- setNames(
+    lapply(seq_len(nrow(cols)), function(i) {
+      col_name <- cols$col_name[i]
+      colDef(
+        name = col_name,
+        align = "center",
+        width = 90,
+        style = function(value, index, name) { # Change background if in Gradient Mode
+          if(color_mode == "Gradient") {
+            list(background = color_map[[cols$col_key[i]]][index])
+          } else {
+            list()
+          }
+        },
+        cell = function(value, index) {
+          if(color_mode == "Flags") { # Add Flag character if in 'Flag' Mode
+            paste0(color_map[[cols$col_key[i]]][index], " ", value)
+          } else {
+            value
+          }
+        },
+        header = function(value) {
+          htmltools::div(title = value, value)
+        }
+      )
+    }),
+    cols$col_key
+  )
+  
+  return(col_defs)
+}
 
 getSgColDefs <- function(cheatSheetData, color_mode) {
   
