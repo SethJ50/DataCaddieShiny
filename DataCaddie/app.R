@@ -818,6 +818,76 @@ ui <- tagList(
                 padding: 2px 10px;     /* tighter padding */
               }
               
+              #course_length_filter .btn {
+                height: 28px;          /* smaller height */
+                line-height: 20px;     /* vertically center text */
+                font-size: 13px;       /* slightly smaller text */
+                padding: 2px 10px;     /* tighter padding */
+              }
+              
+              #course_par_filter .btn {
+                height: 28px;          /* smaller height */
+                line-height: 20px;     /* vertically center text */
+                font-size: 13px;       /* slightly smaller text */
+                padding: 2px 10px;     /* tighter padding */
+              }
+              
+              #avg_dr_dist_filter .btn {
+                height: 28px;          /* smaller height */
+                line-height: 20px;     /* vertically center text */
+                font-size: 13px;       /* slightly smaller text */
+                padding: 2px 10px;     /* tighter padding */
+              }
+              
+              #avg_dr_acc_filter .btn {
+                height: 28px;          /* smaller height */
+                line-height: 20px;     /* vertically center text */
+                font-size: 13px;       /* slightly smaller text */
+                padding: 2px 10px;     /* tighter padding */
+              }
+              
+              #fw_width_filter .btn {
+                height: 28px;          /* smaller height */
+                line-height: 20px;     /* vertically center text */
+                font-size: 13px;       /* slightly smaller text */
+                padding: 2px 10px;     /* tighter padding */
+              }
+              
+              #missed_fw_pen_filter .btn {
+                height: 28px;          /* smaller height */
+                line-height: 20px;     /* vertically center text */
+                font-size: 13px;       /* slightly smaller text */
+                padding: 2px 10px;     /* tighter padding */
+              }
+              
+              #sg_ott_ease_filter .btn {
+                height: 28px;          /* smaller height */
+                line-height: 20px;     /* vertically center text */
+                font-size: 13px;       /* slightly smaller text */
+                padding: 2px 10px;     /* tighter padding */
+              }
+              
+              #sg_app_ease_filter .btn {
+                height: 28px;          /* smaller height */
+                line-height: 20px;     /* vertically center text */
+                font-size: 13px;       /* slightly smaller text */
+                padding: 2px 10px;     /* tighter padding */
+              }
+              
+              #sg_arg_ease_filter .btn {
+                height: 28px;          /* smaller height */
+                line-height: 20px;     /* vertically center text */
+                font-size: 13px;       /* slightly smaller text */
+                padding: 2px 10px;     /* tighter padding */
+              }
+              
+              #sg_putt_ease_filter .btn {
+                height: 28px;          /* smaller height */
+                line-height: 20px;     /* vertically center text */
+                font-size: 13px;       /* slightly smaller text */
+                padding: 2px 10px;     /* tighter padding */
+              }
+              
               #field_strength_filter .btn {
                 height: 28px;          /* smaller height */
                 line-height: 20px;     /* vertically center text */
@@ -898,6 +968,66 @@ ui <- tagList(
                  radioGroupButtons(
                    inputId = "course_diff_filter",
                    label = "Course Difficulty:",
+                   choices = c("All", "Easy", "Medium", "Hard"),
+                   justified = TRUE
+                 ),
+                 radioGroupButtons(
+                   inputId = "course_length_filter",
+                   label = "Course Length:",
+                   choices = c("All", "Short", "Medium", "Long"),
+                   justified = TRUE
+                 ),
+                 radioGroupButtons(
+                   inputId = "course_par_filter",
+                   label = "Course Par:",
+                   choices = c("All", "70", "71", "72", "73"),
+                   justified = TRUE
+                 ),
+                 radioGroupButtons(
+                   inputId = "avg_dr_dist_filter",
+                   label = "Avg. Driving Dist:",
+                   choices = c("All", "Short", "Medium", "Long"),
+                   justified = TRUE
+                 ),
+                 radioGroupButtons(
+                   inputId = "avg_dr_acc_filter",
+                   label = "Avg. Driving Acc:",
+                   choices = c("All", "Low", "Medium", "High"),
+                   justified = TRUE
+                 ),
+                 radioGroupButtons(
+                   inputId = "fw_width_filter",
+                   label = "Fairway Width:",
+                   choices = c("All", "Narrow", "Medium", "Wide"),
+                   justified = TRUE
+                 ),
+                 radioGroupButtons(
+                   inputId = "missed_fw_pen_filter",
+                   label = "Missed Fairway Penalty:",
+                   choices = c("All", "Low", "Medium", "High"),
+                   justified = TRUE
+                 ),
+                 radioGroupButtons(
+                   inputId = "sg_ott_ease_filter",
+                   label = "SG OTT Difficulty:",
+                   choices = c("All", "Easy", "Medium", "Hard"),
+                   justified = TRUE
+                 ),
+                 radioGroupButtons(
+                   inputId = "sg_app_ease_filter",
+                   label = "SG APP Difficulty:",
+                   choices = c("All", "Easy", "Medium", "Hard"),
+                   justified = TRUE
+                 ),
+                 radioGroupButtons(
+                   inputId = "sg_arg_ease_filter",
+                   label = "SG ARG Difficulty:",
+                   choices = c("All", "Easy", "Medium", "Hard"),
+                   justified = TRUE
+                 ),
+                 radioGroupButtons(
+                   inputId = "sg_putt_ease_filter",
+                   label = "SG PUTT Difficulty:",
                    choices = c("All", "Easy", "Medium", "Hard"),
                    justified = TRUE
                  ),
@@ -1117,8 +1247,6 @@ server <- function(input, output, session) {
     })
   })
   
-  session$userData$sessionModelWeights <- reactiveValues()
-  
   # On Favorite Clicked, add or remove favorite from favorite_players list
   observeEvent(input$favorite_clicked, {
     clicked_player <- input$favorite_clicked
@@ -1136,6 +1264,18 @@ server <- function(input, output, session) {
     session$sendCustomMessage("saveFavorites", favorite_players$names)
   })
   
+  # Ask browser for token ONE TIME when session starts
+  session$onFlushed(function() {
+    session$sendCustomMessage("loadUserToken", list())
+  }, once = TRUE)
+  
+  user_token <- reactiveVal(NULL)
+  
+  observeEvent(input$userToken, {
+    cat("🔥 SERVER RECEIVED TOKEN:", input$userToken, "\n")
+    user_token(input$userToken)
+  })
+
   observe({
     if(input$siteTabs == "Home"){
       serverHome(input, output, session)
@@ -1153,6 +1293,7 @@ server <- function(input, output, session) {
       serverCustomModel(input, output, session, favorite_players,
                            playersInTournament, playersInTournamentTourneyNameConv,
                            playersInTournamentPgaNames)
+      
     } else if(input$siteTabs == "Generated Lineups"){
       serverGeneratedLineups(input, output, session, favorite_players,
                              playersInTournament, playersInTournamentTourneyNameConv,

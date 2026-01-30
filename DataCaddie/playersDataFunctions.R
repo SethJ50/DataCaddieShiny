@@ -16,6 +16,33 @@ source("utils.R")
 EASY_COURSE_VAL <- -0.9
 HARD_COURSE_VAL <- 0.9
 
+SHORT_COURSE_VAL <- 99.5 # yardage / par
+LONG_COURSE_VAL <- 101.9
+
+SHORT_AVG_DRIVE <- 283
+LONG_AVG_DRIVE <- 293.8
+
+LOW_DRIVE_ACC <- 0.548
+HIGH_DRIVE_ACC <- 0.642
+
+SMALL_FW_WIDTH <- 29.2
+LARGE_FW_WIDTH <- 36
+
+SMALL_MISS_FW_PEN <- 0.315
+HIGH_MISS_FW_PEN <- 0.395
+
+HARD_SG_OTT <- -0.02
+EASY_SG_OTT <- 0.014
+
+HARD_SG_APP <- -0.017
+EASY_SG_APP <- 0.025
+
+HARD_SG_ARG <- -0.017
+EASY_SG_ARG <- 0.027
+
+HARD_SG_PUTT <- -0.0055
+EASY_SG_PUTT <- 0.0065
+
 EASY_FIELD_VAL <- -0.15
 HARD_FIELD_VAL <- 0.7
 
@@ -34,7 +61,8 @@ nameToFanduel <- function(name) {
     'Ludvig Åberg' = 'Ludvig Aberg',
     'Nico Echavarria' = 'Nicolas Echavarria',
     'Frankie Capan III' = 'Frankie Capan',
-    'Niklas Nørgaard' = 'Niklas Norgaard Moller'
+    'Niklas Nørgaard' = 'Niklas Norgaard Moller',
+    'Matt McCarty' = 'Matthew McCarty'
   )
   
   # Use named lookup with fallback to original
@@ -55,7 +83,8 @@ nameFanduelToPga <- function(name) {
     'Rasmus Hojgaard' = 'Rasmus Højgaard',
     'Ludvig Aberg' = 'Ludvig Åberg',
     'Nicolas Echavarria' = 'Nico Echavarria',
-    'Niklas Norgaard Moller' = 'Niklas Nørgaard'
+    'Niklas Norgaard Moller' = 'Niklas Nørgaard',
+    'Matthew McCarty' = 'Matt McCarty'
   )
   
   out <- FD_TO_PGA[name]
@@ -87,7 +116,8 @@ nameFanduelToTournament <- function(name) {
 #### Get All Data --------------------------------------------------------------
 
 get_all_player_data <- function(favorite_players, playersInTournament, num_rounds) {
-  # ALL: Returns data frame with data for all players combined
+  # ALL: Returns DataFrame with Player, Salary Data, Recent History, Base SG, PGATOUR Stats, and Favorites
+  # NO LONGER does Field Strength / Course Attrs - Use getAllLevelsData, add norms, and join it on "player" (see customModel)
   
   # Make Name Conversions
   playersInTournamentTourneyNameConv <- nameFanduelToTournament(playersInTournament)
@@ -112,12 +142,6 @@ get_all_player_data <- function(favorite_players, playersInTournament, num_round
   # Get PGA Tour Stats
   pgatourStats <- getPgaStats(playersInTournamentPgaNames, pgaData, baseData)
   
-  # Get Field Strength Data
-  fieldStrengthData <- getFieldStrengthData(playersInTournament, data, 200)
-  
-  # Get Course Difficulty Data
-  courseDiffData <- getCourseDifficultyData(playersInTournament, data, 200)
-  
   # Get names of favorite players
   favs <- favorite_players$names
   
@@ -130,8 +154,6 @@ get_all_player_data <- function(favorite_players, playersInTournament, num_round
     left_join(playerFinishes, by = c("tourneyPlayerName" = "player")) %>%
     left_join(pgatourStats, by = c("pgaPlayerName" = "player")) %>%
     left_join(courseHistoryDf, by = c("pgaPlayerName" = "player")) %>% 
-    left_join(fieldStrengthData, by = c("player" = "player")) %>% 
-    left_join(courseDiffData, by = c("player" = "player")) %>% 
     mutate(`Course History` = rowMeans(select(., minus1:minus5), na.rm = TRUE)) %>%
     mutate(`Course History` = ifelse(is.nan(`Course History`), NA, `Course History`)) %>%
     mutate(
@@ -286,145 +308,234 @@ getRecentHistoryDf <- function(playersInTournament, tenRecTournaments, data) {
   return(playerFinishes)
 }
 
-getCourseDifficultyData <- function(playersInTournament, data, N) {
+getAllLevelsData <- function(playersInTournament, data, N) {
   
-  # Get last <= N Rounds of data for each player
-  lastNData <- getLastNRounds(data, playersInTournament, N)
-  
-  # Grab difficulty by course data
-  courseDiffData <- courseStatsData
-  
-  # Join course difficulty with each round
-  finalData <- lastNData %>% 
-    left_join(
-      courseDiffData %>% select(course, difficulty),
-      by = "course"
-    ) %>% 
-    select(player, sgTot, course, difficulty)
-  
-  # Add column indicating difficulty by string
-  finalData <- finalData %>% 
-    mutate(courseDiff = case_when(
-      difficulty <= EASY_COURSE_VAL ~ "easy",
-      difficulty >= HARD_COURSE_VAL ~ "hard",
-      TRUE ~ "medium"
-    ))
-  
-  overallAvg <- finalData %>% 
-    group_by(player) %>% 
-    summarise(overall_avg = mean(sgTot, na.rm = TRUE), .groups = "drop")
-  
-  # k = number of rounds before we are confident in measurement
-  k <- 36
-  
-  # Compute average SG on each course type for each player
-  summaryData <- finalData %>%
-    group_by(player, courseDiff) %>%
-    summarise(avg_sgTot = round(mean(sgTot, na.rm = TRUE), 2), n_rounds = n(), .groups = "drop") %>%
-    left_join(overallAvg, by = "player") %>% 
-    mutate(
-      adj_raw = avg_sgTot - overall_avg,
-      weight = n_rounds / (n_rounds + k),
-      adj_sgTot = round(weight * adj_raw, 2),
-      avg_sgTot = round(avg_sgTot, 2)
-    ) %>% 
-    select(player, courseDiff, avg_sgTot, adj_sgTot)
-  
-  # Rename columns
-  summaryData <- summaryData %>% 
-    pivot_wider(
-      names_from = courseDiff,
-      values_from = c(avg_sgTot, adj_sgTot),
-      names_glue = "{.value}_{courseDiff}",
-      values_fill = 0
-    ) %>% 
-    rename(
-      "SG Easy Course" = avg_sgTot_easy,
-      "SG Medium Course" = avg_sgTot_medium,
-      "SG Hard Course" = avg_sgTot_hard,
-      "SG Easy Course Adjusted" = adj_sgTot_easy,
-      "SG Medium Course Adjusted" = adj_sgTot_medium,
-      "SG Hard Course Adjusted" = adj_sgTot_hard
-    )
-  
-  return(summaryData)
-}
+  # Get All Data for Players in Tournament
+  all_data <- getRoundByRoundData(playersInTournament, data)
 
-getFieldStrengthData <- function(playersInTournament, data, N) {
+  # Get last N Rounds Data
+  lastNData <- all_data %>%
+    mutate(Date = as.Date(dates, format = "%m/%d/%y")) %>%
+    arrange(player, desc(Date)) %>%
+    group_by(player) %>%
+    slice_head(n = N) %>%
+    ungroup()
   
-  # Get last N rounds from every player
-  lastNData <- getLastNRounds(data, playersInTournament, N)
-  
-  # Get field strength data, add tournamentyear
-  fieldStrengthData <- fieldStrengthData %>% 
-    mutate(tournamentyear = paste(tournament, year))
-  
-  # Add 'strength' column from fieldStrengthData to lastNData by joining on equal tournamentYear values
-  finalData <- lastNData %>% 
-    left_join(
-      fieldStrengthData %>% select(tournamentyear, strength),
-      by = "tournamentyear"
-    ) %>% 
-    select(player, sgTot, tournamentyear, strength)
-  
-  # Mark Easy, Medium, and Hard field strenghts
-  finalData <- finalData %>% 
-    mutate(fieldType = case_when(
-      strength < EASY_FIELD_VAL ~ "easy",
-      strength > HARD_FIELD_VAL ~ "hard",
-      TRUE ~ "medium"
-    ))
-  
-  overallAvg <- finalData %>% 
+  # Calculate Baseline SG TOT for each player
+  baseline <- lastNData %>% 
     group_by(player) %>% 
-    summarise(overall_avg = mean(sgTot, na.rm = TRUE), .groups = "drop")
+    summarise(baseline_sgTot = mean(sgTot, na.rm = TRUE), .groups = "drop")
   
-  # k = number of rounds before we are confident in measurement
-  k <- 36
+  # Design Object for Each Course Attribute Related Feature
+  filter_spec <- list(
+    course_diff_filter = list(col = "courseDiff",
+                              map = c(Easy = "easy", Medium = "medium", Hard = "hard")),
+    
+    course_length_filter = list(col = "courseLength",
+                                map = c(Short = "short", Medium = "medium", Long = "long")),
+    
+    avg_dr_dist_filter = list(col = "avgDriveLength",
+                              map = c(Short = "short", Medium = "medium", Long = "long")),
+    
+    avg_dr_acc_filter = list(col = "avgDrivingAcc",
+                             map = c(Low = "low", Medium = "medium", High = "high")),
+    
+    fw_width_filter = list(col = "avgFwWidth",
+                           map = c(Narrow = "narrow", Medium = "medium", Wide = "wide")),
+    
+    missed_fw_pen_filter = list(col = "missedFwPenalty",
+                                map = c(Low = "low", Medium = "medium", High = "high")),
+    
+    sg_ott_ease_filter = list(col = "sgOttEase",
+                              map = c(Hard = "hard", Medium = "medium", Easy = "easy")),
+    
+    sg_app_ease_filter = list(col = "sgAppEase",
+                              map = c(Hard = "hard", Medium = "medium", Easy = "easy")),
+    
+    sg_arg_ease_filter = list(col = "sgArgEase",
+                              map = c(Hard = "hard", Medium = "medium", Easy = "easy")),
+    
+    sg_putt_ease_filter = list(col = "sgPuttEase",
+                               map = c(Hard = "hard", Medium = "medium", Easy = "easy")),
+    
+    field_strength_filter = list(col = "fieldType",
+                                 map = c(Weak = "easy", Medium = "medium", Strong = "hard"))
+  )
   
-  # Compute average sgTot for each field type for each player
-  summaryData <- finalData %>%
-    group_by(player, fieldType) %>%
-    summarise(avg_sgTot = round(mean(sgTot, na.rm = TRUE), 2), n_rounds = n(), .groups = "drop") %>%
-    left_join(overallAvg, by = "player") %>% 
-    mutate(
-      adj_raw = avg_sgTot - overall_avg,
-      weight = n_rounds / (n_rounds + k),
-      adj_sgTot = round(weight * adj_raw, 2),
-      avg_sgTot = round(avg_sgTot, 2)
-    ) %>% 
-    select(player, fieldType, avg_sgTot, adj_sgTot)
+  # Function that calculates, for a given course attr, player performance on each level
+  calc_filter_adjustments <- function(data, filter_name, filter_info, baseline, k) {
+    
+    # Grab Current Course Attr 'col'
+    col_name <- filter_info$col
+    
+    # Grab Map of Levels of Attr
+    level_map <- filter_info$map
+    
+    # For each level of this course attr
+    results <- lapply(names(level_map), function(level_label) {
+      
+      # Grab the level value
+      level_value <- level_map[[level_label]]
+      
+      tmp <- data %>% 
+        mutate(Date = as.Date(dates, format = "%m/%d/%y")) %>%
+        filter(.data[[col_name]] == level_value) %>% 
+        group_by(player) %>% 
+        slice_head(n = k) %>% 
+        summarise(
+          avg_sgTot_level = mean(sgTot, na.rm = TRUE),
+          n_level = n(),
+          .groups = "drop"
+        ) %>% 
+        left_join(baseline, by = "player") %>% 
+        mutate(
+          adj_raw = avg_sgTot_level - baseline_sgTot,
+          weight = round(n_level / (n_level + k), 2),
+          adj_sgTot = round(weight * adj_raw, 2),
+          filter = filter_name,
+          level = level_label
+        )
+    })
+    
+    bind_rows(results)
+  }
   
-  summaryData <- summaryData %>% 
+  # k: The number of rounds until we are confident about a measurement (for adjusted stats)
+  k <- 50
+  
+  # Iterate over all course attributes, creating player performance on each level of them
+  adjustment_results <- lapply(names(filter_spec), function(fname) {
+    calc_filter_adjustments(
+      data = all_data,
+      filter_name = fname,
+      filter_info = filter_spec[[fname]],
+      baseline = baseline,
+      k = k
+    )
+  }) %>% 
+    bind_rows()
+  
+  # Pivot to output df of form | player | SG <attr> <level> | SG <attr> <level> Adjusted |
+  final_adjustments <- adjustment_results %>%
+    select(player, filter, level, avg_sgTot_level, adj_sgTot) %>%
     pivot_wider(
-      names_from = fieldType,
-      values_from = c(avg_sgTot, adj_sgTot),
-      names_glue = "{.value}_{fieldType}",
-      values_fill = 0
+      names_from = c(filter, level),
+      values_from = c(avg_sgTot_level, adj_sgTot),
+      names_glue = "{filter}_{level}_{.value}"
     ) %>% 
     rename(
-      "SG Easy Field" = avg_sgTot_easy,
-      "SG Medium Field" = avg_sgTot_medium,
-      "SG Hard Field" = avg_sgTot_hard,
-      "SG Easy Field Adjusted" = adj_sgTot_easy,
-      "SG Medium Field Adjusted" = adj_sgTot_medium,
-      "SG Hard Field Adjusted" = adj_sgTot_hard
+      
+      # ---- Course Difficulty ----
+      "SG Easy Course" = course_diff_filter_Easy_avg_sgTot_level,
+      "SG Medium Course" = course_diff_filter_Medium_avg_sgTot_level,
+      "SG Hard Course" = course_diff_filter_Hard_avg_sgTot_level,
+      "SG Easy Course Adjusted" = course_diff_filter_Easy_adj_sgTot,
+      "SG Medium Course Adjusted" = course_diff_filter_Medium_adj_sgTot,
+      "SG Hard Course Adjusted" = course_diff_filter_Hard_adj_sgTot,
+      
+      # ---- Course Length ----
+      "SG Short Course" = course_length_filter_Short_avg_sgTot_level,
+      "SG Medium Length Course" = course_length_filter_Medium_avg_sgTot_level,
+      "SG Long Course" = course_length_filter_Long_avg_sgTot_level,
+      "SG Short Course Adjusted" = course_length_filter_Short_adj_sgTot,
+      "SG Medium Length Course Adjusted" = course_length_filter_Medium_adj_sgTot,
+      "SG Long Course Adjusted" = course_length_filter_Long_adj_sgTot,
+      
+      # ---- Driving Distance ----
+      "SG Short Driver Courses" = avg_dr_dist_filter_Short_avg_sgTot_level,
+      "SG Medium Driver Courses" = avg_dr_dist_filter_Medium_avg_sgTot_level,
+      "SG Long Driver Courses" = avg_dr_dist_filter_Long_avg_sgTot_level,
+      "SG Short Driver Courses Adjusted" = avg_dr_dist_filter_Short_adj_sgTot,
+      "SG Medium Driver Courses Adjusted" = avg_dr_dist_filter_Medium_adj_sgTot,
+      "SG Long Driver Courses Adjusted" = avg_dr_dist_filter_Long_adj_sgTot,
+      
+      # ---- Driving Accuracy ----
+      "SG Low Accuracy Courses" = avg_dr_acc_filter_Low_avg_sgTot_level,
+      "SG Medium Accuracy Courses" = avg_dr_acc_filter_Medium_avg_sgTot_level,
+      "SG High Accuracy Courses" = avg_dr_acc_filter_High_avg_sgTot_level,
+      "SG Low Accuracy Courses Adjusted" = avg_dr_acc_filter_Low_adj_sgTot,
+      "SG Medium Accuracy Courses Adjusted" = avg_dr_acc_filter_Medium_adj_sgTot,
+      "SG High Accuracy Courses Adjusted" = avg_dr_acc_filter_High_adj_sgTot,
+      
+      # ---- Fairway Width ----
+      "SG Narrow Fairways" = fw_width_filter_Narrow_avg_sgTot_level,
+      "SG Medium Fairways" = fw_width_filter_Medium_avg_sgTot_level,
+      "SG Wide Fairways" = fw_width_filter_Wide_avg_sgTot_level,
+      "SG Narrow Fairways Adjusted" = fw_width_filter_Narrow_adj_sgTot,
+      "SG Medium Fairways Adjusted" = fw_width_filter_Medium_adj_sgTot,
+      "SG Wide Fairways Adjusted" = fw_width_filter_Wide_adj_sgTot,
+      
+      # ---- Missed Fairway Penalty ----
+      "SG Low Miss Penalty" = missed_fw_pen_filter_Low_avg_sgTot_level,
+      "SG Medium Miss Penalty" = missed_fw_pen_filter_Medium_avg_sgTot_level,
+      "SG High Miss Penalty" = missed_fw_pen_filter_High_avg_sgTot_level,
+      "SG Low Miss Penalty Adjusted" = missed_fw_pen_filter_Low_adj_sgTot,
+      "SG Medium Miss Penalty Adjusted" = missed_fw_pen_filter_Medium_adj_sgTot,
+      "SG High Miss Penalty Adjusted" = missed_fw_pen_filter_High_adj_sgTot,
+      
+      # ---- SG OTT Ease ----
+      "SG Hard OTT Courses" = sg_ott_ease_filter_Hard_avg_sgTot_level,
+      "SG Medium OTT Courses" = sg_ott_ease_filter_Medium_avg_sgTot_level,
+      "SG Easy OTT Courses" = sg_ott_ease_filter_Easy_avg_sgTot_level,
+      "SG Hard OTT Courses Adjusted" = sg_ott_ease_filter_Hard_adj_sgTot,
+      "SG Medium OTT Courses Adjusted" = sg_ott_ease_filter_Medium_adj_sgTot,
+      "SG Easy OTT Courses Adjusted" = sg_ott_ease_filter_Easy_adj_sgTot,
+      
+      # ---- SG APP Ease ----
+      "SG Hard APP Courses" = sg_app_ease_filter_Hard_avg_sgTot_level,
+      "SG Medium APP Courses" = sg_app_ease_filter_Medium_avg_sgTot_level,
+      "SG Easy APP Courses" = sg_app_ease_filter_Easy_avg_sgTot_level,
+      "SG Hard APP Courses Adjusted" = sg_app_ease_filter_Hard_adj_sgTot,
+      "SG Medium APP Courses Adjusted" = sg_app_ease_filter_Medium_adj_sgTot,
+      "SG Easy APP Courses Adjusted" = sg_app_ease_filter_Easy_adj_sgTot,
+      
+      # ---- SG ARG Ease ----
+      "SG Hard ARG Courses" = sg_arg_ease_filter_Hard_avg_sgTot_level,
+      "SG Medium ARG Courses" = sg_arg_ease_filter_Medium_avg_sgTot_level,
+      "SG Easy ARG Courses" = sg_arg_ease_filter_Easy_avg_sgTot_level,
+      "SG Hard ARG Courses Adjusted" = sg_arg_ease_filter_Hard_adj_sgTot,
+      "SG Medium ARG Courses Adjusted" = sg_arg_ease_filter_Medium_adj_sgTot,
+      "SG Easy ARG Courses Adjusted" = sg_arg_ease_filter_Easy_adj_sgTot,
+      
+      # ---- SG PUTT Ease ----
+      "SG Hard Putting Courses" = sg_putt_ease_filter_Hard_avg_sgTot_level,
+      "SG Medium Putting Courses" = sg_putt_ease_filter_Medium_avg_sgTot_level,
+      "SG Easy Putting Courses" = sg_putt_ease_filter_Easy_avg_sgTot_level,
+      "SG Hard Putting Courses Adjusted" = sg_putt_ease_filter_Hard_adj_sgTot,
+      "SG Medium Putting Courses Adjusted" = sg_putt_ease_filter_Medium_adj_sgTot,
+      "SG Easy Putting Courses Adjusted" = sg_putt_ease_filter_Easy_adj_sgTot,
+      
+      # ---- Field Strength ----
+      "SG Weak Fields" = field_strength_filter_Weak_avg_sgTot_level,
+      "SG Medium Fields" = field_strength_filter_Medium_avg_sgTot_level,
+      "SG Strong Fields" = field_strength_filter_Strong_avg_sgTot_level,
+      "SG Easy Field Adjusted" = field_strength_filter_Weak_adj_sgTot,
+      "SG Medium Field Adjusted" = field_strength_filter_Medium_adj_sgTot,
+      "SG Hard Field Adjusted" = field_strength_filter_Strong_adj_sgTot
     )
   
-  return(summaryData)
+  return(final_adjustments)
 }
 
 getRoundByRoundData <- function(playersInTournament, data) {
   playersInTournamentTourneyNameConv <- nameFanduelToTournament(playersInTournament)
   
+  # Get round by round data for players in tournament
   sgRows <- data %>% 
     filter(player %in% playersInTournamentTourneyNameConv, Round != "Event") %>% 
     mutate(Date = as.Date(dates, format = "%m/%d/%y"),
-           tournamentyear = paste(tournament, format(Date, "%Y"))) %>% 
+           tournamentyear = paste(tournament, format(Date, "%Y")),
+           year = format(Date, "%Y")
+    ) %>% 
     arrange(player, desc(Date))
   
   # Grab difficulty by course data
   courseDiffData <- courseStatsData
+  # Check for duplicate Course Years
+  # d <- courseDiffData %>%
+  #   count(course, year) %>%
+  #   filter(n > 1)
+  # View(d)
   
   # Grab field strength data
   fieldStrengthData <- fieldStrengthData %>% 
@@ -439,20 +550,65 @@ getRoundByRoundData <- function(playersInTournament, data) {
     left_join(
       fieldStrengthData %>% select(tournamentyear, strength),
       by = "tournamentyear"
-    ) %>% 
-    left_join(
-      courseDiffData %>% select(course, difficulty),
-      by = "course"
     ) %>%
+    left_join(
+      courseDiffData,
+      by = c("course", "year")
+    ) %>% 
     mutate(fanduelName = nameToFanduel(player)) %>%
-    left_join(salaryData, by = c("fanduelName" = "player"))
-    
+    left_join(salaryData, by = c("fanduelName" = "player")) %>% 
+    mutate(ydg_per_par = yardage / par)
   
   finalData <- finalData %>% 
     mutate(
       courseDiff = case_when(
         difficulty <= EASY_COURSE_VAL ~ "easy",
         difficulty >= HARD_COURSE_VAL ~ "hard",
+        TRUE ~ "medium"
+      ),
+      courseLength = case_when(
+        ydg_per_par <= SHORT_COURSE_VAL ~ "short",
+        ydg_per_par >= LONG_COURSE_VAL ~ "long",
+        TRUE ~ "medium"
+      ),
+      avgDriveLength = case_when(
+        adj_driving_distance <= SHORT_AVG_DRIVE ~ "short",
+        adj_driving_distance >= LONG_AVG_DRIVE ~ "long",
+        TRUE ~ "medium"
+      ),
+      avgDrivingAcc = case_when(
+        adj_driving_accuracy <= LOW_DRIVE_ACC ~ "low",
+        adj_driving_accuracy >= HIGH_DRIVE_ACC ~ "high",
+        TRUE ~ "medium"
+      ),
+      avgFwWidth = case_when(
+        fw_width <= SMALL_FW_WIDTH ~ "narrow",
+        fw_width >= LARGE_FW_WIDTH ~ "wide",
+        TRUE ~ "medium"
+      ),
+      missedFwPenalty = case_when(
+        fw_diff <= SMALL_MISS_FW_PEN ~ "low",
+        fw_diff >= HIGH_MISS_FW_PEN ~ "high",
+        TRUE ~ "medium"
+      ),
+      sgOttEase = case_when(
+        ott_sg <= HARD_SG_OTT ~ "hard",
+        ott_sg <= EASY_SG_OTT ~ "easy",
+        TRUE ~ "medium"
+      ),
+      sgAppEase = case_when(
+        app_sg <= HARD_SG_APP ~ "hard",
+        app_sg >= EASY_SG_APP ~ "easy",
+        TRUE ~ "medium"
+      ),
+      sgArgEase = case_when(
+        arg_sg <= HARD_SG_ARG ~ "hard",
+        arg_sg >= EASY_SG_ARG ~ "easy",
+        TRUE ~ "medium"
+      ),
+      sgPuttEase = case_when(
+        putt_sg <= HARD_SG_PUTT ~ "hard",
+        putt_sg >= EASY_SG_PUTT ~ "easy",
         TRUE ~ "medium"
       ),
       fieldType = case_when(

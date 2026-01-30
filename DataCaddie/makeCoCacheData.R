@@ -4,7 +4,7 @@ source("courseOverview.R")
 source("utils.R")
 source("basics.R")
 
-curr_course <- "Augusta National Golf Club"
+curr_course <- "Torrey Pines Golf Course (South Course)"
 playersInTournament <- unique(salaries$player)
 playersInTournamentTourneyNameConv <- nameFanduelToTournament(playersInTournament)
 playersInTournamentPgaNames <- nameFanduelToPga(playersInTournament)

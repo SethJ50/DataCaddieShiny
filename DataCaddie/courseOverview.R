@@ -22,7 +22,7 @@ serverCourseOverview <- function(input, output, session, favorite_players,
                                  playersInTournamentPgaNames) {
   
   # ----- SET WEEK'S COURSE -----
-  week_course <- "Augusta National Golf Club"
+  week_course <- "Torrey Pines Golf Course (South Course)"
   shinyWidgets::updatePickerInput(
     session,
     inputId = "co_course",
@@ -57,10 +57,14 @@ serverCourseOverview <- function(input, output, session, favorite_players,
   possible_years <- reactive({
     req(input$co_course)
     
-    courseStatsData %>% 
+    yrs <- courseStatsData %>% 
       filter(course == input$co_course) %>% 
       pull(year) %>% 
       unique()
+    
+    yrs <- sort(as.numeric(yrs), decreasing = TRUE)
+    
+    c("all", yrs)
   })
   
   # ----- Update Course History Table Year Input ------

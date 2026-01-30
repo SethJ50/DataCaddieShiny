@@ -669,6 +669,39 @@ renderGpRecentRounds <- function(input, output, playersInTournament) {
     eventData <- getEventRoundsData(input$gp_player)
     roundData <- getIndRoundsData(input$gp_player)
     
+    # Ensure all Event Rows Exist - if not, impute
+    event_counts <- eventData %>% 
+      count(Date, tournament, name = "n_event_rows")
+    
+    round_aggregated <- roundData %>%
+      group_by(player, Date, tournament) %>%
+      summarise(
+        finish = first(finish),
+        Round  = "Event",
+        sgPutt = sum(sgPutt, na.rm = TRUE),
+        sgArg  = sum(sgArg,  na.rm = TRUE),
+        sgApp  = sum(sgApp,  na.rm = TRUE),
+        sgOtt  = sum(sgOtt,  na.rm = TRUE),
+        sgT2G  = sum(sgT2G,  na.rm = TRUE),
+        sgTot  = sum(sgTot,  na.rm = TRUE),
+        .groups = "drop"
+      ) %>%
+      select(-player)
+    
+    rows_to_add <- round_aggregated %>%
+      left_join(event_counts, by = c("Date", "tournament")) %>%
+      filter(is.na(n_event_rows) | n_event_rows != 1) %>%
+      select(-n_event_rows)
+    
+    eventData <- bind_rows(eventData, rows_to_add)
+    
+    # For each unique Date, tournament combination of roundData
+    # if there isn't a matching singular entry for that combo in eventData
+    #   add a row to eventData, with columns:
+    #   player, Date, finish, tournament, Round, sgPutt, sgArg, sgApp, sgOtt, sgT2G, sgTot
+    #   where Round = "Event, player, Date, and finish are the first value from the roundData entry,
+    #   and the sg categories are sums of the categories from the corresponding rows of roundData
+    
     # Add missing finish cols
     if (!"finish" %in% names(eventData)) {
       eventData$finish <- NA

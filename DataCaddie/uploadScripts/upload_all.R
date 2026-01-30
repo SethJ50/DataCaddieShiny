@@ -8,7 +8,7 @@ source("uploadScripts/04_upload_course_history.R")
 source("uploadScripts/05_upload_field_strength.R")
 source("uploadScripts/06_upload_course_difficulty.R")
 
-run_tournament <- TRUE
+run_tournament <- FALSE
 
 cat("🚀 Starting full upload pipeline...\n")
 

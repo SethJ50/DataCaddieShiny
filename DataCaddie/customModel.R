@@ -82,8 +82,44 @@ modelStatsOptions <- c(
   "SG HARD FIELD" = "SG Hard Field Adjusted",
   
   "SG EASY COURSE" = "SG Easy Course Adjusted",
-  "SG MEDIUM COURSE" = "SG Medium Course Adjusted",
+  "SG MEDIUM DIFF COURSE" = "SG Medium Course Adjusted",
   "SG HARD COURSE" = "SG Hard Course Adjusted",
+  
+  "SG SHORT COURSE" = "SG Short Course Adjusted",
+  "SG MEDIUM LEN COURSE" = "SG Medium Length Course Adjusted",
+  "SG LONG COURSE" = "SG Long Course Adjusted",
+  
+  "SG SHORT AVG DRIVE COURSE" = "SG Short Driver Courses Adjusted",
+  "SG MEDIUM AVG DRIVE COURSE" = "SG Medium Driver Courses Adjusted",
+  "SG LONG AVG DRIVE COURSE" = "SG Long Driver Courses Adjusted",
+  
+  "SG LOW AVG ACC COURSE" = "SG Low Accuracy Courses Adjusted",
+  "SG MEDIUM AVG ACC COURSE" = "SG Medium Accuracy Courses Adjusted",
+  "SG HIGH AVG ACC COURSE" = "SG High Accuracy Courses Adjusted",
+  
+  "SG NARROW FAIRWAYS" = "SG Narrow Fairways Adjusted",
+  "SG MEDIUM FAIRWAYS" = "SG Medium Fairways Adjusted",
+  "SG WIDE FAIRWAYS" = "SG Wide Fairways Adjusted",
+  
+  "SG LOW MISS FAIRWAY PENALTY" = "SG Low Miss Penalty Adjusted",
+  "SG MEDIUM MISS FAIRWAY PENALTY" = "SG Medium Miss Penalty Adjusted",
+  "SG HIGH MISS FAIRWAY PENALTY" = "SG High Miss Penalty Adjusted",
+  
+  "SG EASY OTT COURSE" = "SG Easy OTT Courses Adjusted",
+  "SG MEDIUM OTT COURSE" = "SG Medium OTT Courses Adjusted",
+  "SG HARD OTT COURSE" = "SG Hard OTT Courses Adjusted",
+  
+  "SG EASY APP COURSE" = "SG Easy APP Courses Adjusted",
+  "SG MEDIUM APP COURSE" = "SG Medium APP Courses Adjusted",
+  "SG HARD APP COURSE" = "SG Hard APP Courses Adjusted",
+  
+  "SG EASY ARG COURSE" = "SG Easy ARG Courses Adjusted",
+  "SG MEDIUM ARG COURSE" = "SG Medium ARG Courses Adjusted",
+  "SG HARD ARG COURSE" = "SG Hard ARG Courses Adjusted",
+  
+  "SG EASY PUTT COURSE" = "SG Easy Putting Courses Adjusted",
+  "SG MEDIUM PUTT COURSE" = "SG Medium Putting Courses Adjusted",
+  "SG HARD PUTT COURSE" = "SG Hard Putting Courses Adjusted",
   
   "COURSE HISTORY" = "Course History"
 )
@@ -187,10 +223,11 @@ serverCustomModel <- function(input, output, session, favorite_players,
     totalWeight()
   })
   
+  # Get dataframe full of player's data for all stats
+  model_data <- getDataForModel(playersInTournament)
+  
   # Model table data reactive on change of model stats
   modelTableData <- reactive({
-    # Grab dataframe full of player's data for all stats
-    model_data <- getDataForModel(playersInTournament)
     
     # Grab Player Name, Salaries on each site, and model stats and normalized versions
     player_cols <- c("player", "fdSalary", "dkSalary")
@@ -384,6 +421,10 @@ getDataForModel <- function(playersInTournament) {
   all_last36 <- get_all_player_data(fav_players, playersInTournament, 36)$data
   all_last50 <- get_all_player_data(fav_players, playersInTournament, 50)$data
   
+  # Get Levels Data (Field Strength, Course Attrs) and Add Norms
+  courseDiffData <- getAllLevelsData(playersInTournament, data, 100)
+  courseDiffData <- add_normalized_columns(courseDiffData)
+  
   # columns to rename
   sg_cols <- c("sgPutt", "sgArg", "sgApp", "sgOtt", "sgT2G", "sgTot")
   sg_cols_norm <- paste0(sg_cols, "_norm")
@@ -420,21 +461,8 @@ getDataForModel <- function(playersInTournament) {
   final_data <- all_last50 %>%
     left_join(all_last12, by = "player") %>%
     left_join(all_last24, by = "player") %>%
-    left_join(all_last36, by = "player")
+    left_join(all_last36, by = "player") %>% 
+    left_join(courseDiffData, by = "player")
   
   return(final_data)
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
